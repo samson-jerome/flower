@@ -58,6 +58,8 @@ class MainWindow(QMainWindow):
     def _connect_signals(self) -> None:
         self._canvas.node_selected.connect(self._on_node_selected)
         self._canvas.node_edit_requested.connect(self._open_editor)
+        self._canvas.add_child_requested.connect(self._add_child_node)
+        self._canvas.delete_requested.connect(self._delete_selected_node)
         self._toolbar.add_node_requested.connect(self._add_child_node)
         self._toolbar.delete_node_requested.connect(self._delete_selected_node)
         self._toolbar.refresh_requested.connect(self._canvas.refresh_layout)
@@ -176,9 +178,9 @@ class MainWindow(QMainWindow):
 
     def _on_node_updated(self, node_id: str, node: Node) -> None:
         self.mark_dirty()
-        self._canvas.refresh_node(node)
-        if node_id == self._canvas._selected_id:
-            self._info.show_node(node)
+        self._canvas.refresh_layout()
+        self._canvas.select_node(node_id)
+        self._info.show_node(node)
 
     # ── Selection ────────────────────────────────────────────────────────────
 

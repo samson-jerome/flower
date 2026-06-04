@@ -12,6 +12,8 @@ from flower.ui.edge_item import EdgeItem
 class GraphCanvas(QGraphicsView):
     node_selected       = Signal(str)  # node_id
     node_edit_requested = Signal(str)  # node_id
+    add_child_requested = Signal()
+    delete_requested    = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -123,6 +125,10 @@ class GraphCanvas(QGraphicsView):
             self._reorder_sibling(node, +1)
         elif key == Qt.Key.Key_R:
             self.refresh_layout()
+        elif key == Qt.Key.Key_C:
+            self.add_child_requested.emit()
+        elif key == Qt.Key.Key_Delete:
+            self.delete_requested.emit()
 
     def _find_node(self, node_id: str) -> Node | None:
         def _search(nodes: list[Node]) -> Node | None:
