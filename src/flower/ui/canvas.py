@@ -15,6 +15,19 @@ def _deactivate_subtree(node: Node) -> None:
         _deactivate_subtree(child)
 
 
+def _activate_ancestors(node: Node) -> None:
+    parent = node.parent
+    while parent is not None:
+        parent.is_active = True
+        parent = parent.parent
+
+
+def _activate_subtree(node: Node) -> None:
+    for child in node.children:
+        child.is_active = True
+        _activate_subtree(child)
+
+
 class GraphCanvas(QGraphicsView):
     node_selected       = Signal(str)  # node_id
     node_edit_requested = Signal(str)  # node_id
@@ -116,6 +129,9 @@ class GraphCanvas(QGraphicsView):
         node.is_active = not node.is_active
         if not node.is_active:
             _deactivate_subtree(node)
+        else:
+            _activate_ancestors(node)
+            _activate_subtree(node)
         prev_selected = self._selected_id
         self.refresh_layout()
         if prev_selected:
