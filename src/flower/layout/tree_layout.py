@@ -6,6 +6,7 @@ NODE_STEP      = 44.0
 NODE_PADDING_H = 24.0
 MIN_NODE_WIDTH = 120.0
 MAX_NODE_WIDTH = 300.0
+NODE_GAP_H     = 20.0  # horizontal gap between a parent column and its children column
 
 
 class NodePos(NamedTuple):
@@ -68,7 +69,7 @@ def compute_layout(roots: list[Node], width_fn: Callable[[str], float]) -> dict[
     x = 0.0
     for d in range(max(widths.keys()) + 1 if widths else 0):
         col_x[d] = x
-        x += widths.get(d, MIN_NODE_WIDTH)
+        x += widths.get(d, MIN_NODE_WIDTH) + NODE_GAP_H
 
     positions: dict[str, NodePos] = {}
     y = 0.0
