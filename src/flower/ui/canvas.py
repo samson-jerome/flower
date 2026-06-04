@@ -14,6 +14,7 @@ class GraphCanvas(QGraphicsView):
     node_edit_requested = Signal(str)  # node_id
     add_child_requested = Signal()
     delete_requested    = Signal()
+    node_active_changed = Signal()     # graph mutated, mark dirty
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -32,6 +33,7 @@ class GraphCanvas(QGraphicsView):
         self._signals = NodeItemSignals()
         self._signals.selected.connect(self._on_node_selected)
         self._signals.edit_requested.connect(self.node_edit_requested)
+        self._signals.active_toggled.connect(self._on_active_toggled)
 
     # ── Public API ──────────────────────────────────────────────────────────
 
@@ -98,6 +100,17 @@ class GraphCanvas(QGraphicsView):
 
     def _on_node_selected(self, node_id: str) -> None:
         self.select_node(node_id)
+
+    def _on_active_toggled(self, node_id: str) -> None:
+        node = self._find_node(node_id)
+        if node is None:
+            return
+        node.is_active = not node.is_active
+        prev_selected = self._selected_id
+        self.refresh_layout()
+        if prev_selected:
+            self.select_node(prev_selected)
+        self.node_active_changed.emit()
 
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.MiddleButton:

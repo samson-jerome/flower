@@ -19,6 +19,7 @@ _TYPE_COLORS: dict[NodeType, QColor] = {
 class NodeItemSignals(QObject):
     selected       = Signal(str)  # node_id
     edit_requested = Signal(str)  # node_id
+    active_toggled = Signal(str)  # node_id
 
 
 class NodeItem(QGraphicsItem):
@@ -87,7 +88,11 @@ class NodeItem(QGraphicsItem):
         painter.setOpacity(1.0)
 
     def mousePressEvent(self, event) -> None:
-        self._signals.selected.emit(self._node.id)
+        if event.pos().x() < 20:
+            # Click on the active-state dot — toggle without changing selection.
+            self._signals.active_toggled.emit(self._node.id)
+        else:
+            self._signals.selected.emit(self._node.id)
         super().mousePressEvent(event)
 
     def mouseDoubleClickEvent(self, event) -> None:
