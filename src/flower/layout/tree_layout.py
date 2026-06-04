@@ -50,7 +50,10 @@ def _place(
 ) -> float:
     w = widths.get(depth, MIN_NODE_WIDTH)
     positions[node.id] = NodePos(x=col_x.get(depth, 0.0), y=y_start, width=w)
-    y = y_start + NODE_STEP
+    if not node.children:
+        return y_start + NODE_STEP
+    # First child starts at the same Y as the parent.
+    y = y_start
     for child in node.children:
         y = _place(child, depth + 1, y, col_x, widths, positions)
     return y

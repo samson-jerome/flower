@@ -64,7 +64,8 @@ def test_layout_child_y_offset():
     root  = _node("root", children=[child])
     child.parent = root
     positions = compute_layout([root], width_fn)
-    assert positions[child.id].y == NODE_STEP
+    # First child aligns vertically with its parent.
+    assert positions[child.id].y == positions[root.id].y
 
 
 def test_layout_two_roots_stacked():
