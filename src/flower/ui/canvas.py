@@ -1,11 +1,11 @@
 from __future__ import annotations
-from PySide6.QtWidgets import QGraphicsView, QGraphicsScene
-from PySide6.QtGui import QPainter, QKeyEvent, QFontMetrics, QFont
-from PySide6.QtCore import Qt, Signal, QPoint, QPointF
+from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
+from PySide6.QtGui import QPainter, QKeyEvent, QFontMetrics, QFont, QPixmap, QColor, QPen, QBrush
+from PySide6.QtCore import Qt, Signal, QPoint, QPointF, QRectF
 from flower.models.graph import Graph
-from flower.models.node import Node
-from flower.layout.tree_layout import compute_layout, NodePos
-from flower.ui.node_item import NodeItem, NodeItemSignals
+from flower.models.node import Node, NodeType
+from flower.layout.tree_layout import compute_layout, NodePos, node_label
+from flower.ui.node_item import NodeItem, NodeItemSignals, NODE_HEIGHT, _TYPE_COLORS
 from flower.ui.edge_item import EdgeItem
 
 
@@ -26,6 +26,61 @@ def _activate_subtree(node: Node) -> None:
     for child in node.children:
         child.is_active = True
         _activate_subtree(child)
+
+
+_DRAG_GHOST_W       = 180
+_DRAG_GHOST_MAX     = 4    # node + up to 3 children shown
+_DRAG_GHOST_GAP     = 3
+_DRAG_GHOST_OFFSET  = 14   # px offset of ghost from cursor
+
+
+def _create_drag_pixmap(node: Node) -> QPixmap:
+    """Render node + first children into a semi-transparent drag preview."""
+    previewed = [node] + ([] if node.is_collapsed else node.children[:_DRAG_GHOST_MAX - 1])
+    has_more  = (not node.is_collapsed) and len(node.children) >= _DRAG_GHOST_MAX
+
+    row_h   = int(NODE_HEIGHT)
+    n_rows  = len(previewed)
+    total_h = n_rows * row_h + (n_rows - 1) * _DRAG_GHOST_GAP + (14 if has_more else 0)
+
+    pix = QPixmap(_DRAG_GHOST_W, total_h)
+    pix.fill(Qt.GlobalColor.transparent)
+
+    painter = QPainter(pix)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    for i, n in enumerate(previewed):
+        y       = i * (row_h + _DRAG_GHOST_GAP)
+        opacity = max(0.12, 1.0 - i * 0.28)
+        color   = _TYPE_COLORS.get(n.type, QColor("#808080"))
+
+        painter.setOpacity(opacity)
+        bg = QColor(color)
+        bg.setAlpha(90)
+        painter.setBrush(QBrush(bg))
+        painter.setPen(QPen(color, 1.5))
+        painter.drawRoundedRect(QRectF(0, y, _DRAG_GHOST_W, row_h), 6, 6)
+
+        painter.setPen(QPen(Qt.GlobalColor.white))
+        painter.drawText(
+            QRectF(8, y, _DRAG_GHOST_W - 16, row_h),
+            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+            node_label(n),
+        )
+
+    if has_more:
+        remaining = len(node.children) - (_DRAG_GHOST_MAX - 1)
+        painter.setOpacity(0.30)
+        painter.setPen(QPen(Qt.GlobalColor.white))
+        y = n_rows * (row_h + _DRAG_GHOST_GAP)
+        painter.drawText(
+            QRectF(8, y, _DRAG_GHOST_W - 16, 14),
+            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+            f"… +{remaining} nœuds",
+        )
+
+    painter.end()
+    return pix
 
 
 class GraphCanvas(QGraphicsView):
@@ -49,11 +104,12 @@ class GraphCanvas(QGraphicsView):
         self._selected_id:        str | None          = None
         self._space_held:         bool                = False
         self._pan_start:          QPoint              = QPoint()
-        self._drag_candidate_id:  str | None          = None
-        self._drag_start_view:    QPoint              = QPoint()
-        self._dragging:           bool                = False
-        self._drag_node_id:       str | None          = None
-        self._highlight_item:     NodeItem | None     = None
+        self._drag_candidate_id:  str | None               = None
+        self._drag_start_view:    QPoint                   = QPoint()
+        self._dragging:           bool                     = False
+        self._drag_node_id:       str | None               = None
+        self._highlight_item:     NodeItem | None          = None
+        self._drag_ghost:         QGraphicsPixmapItem | None = None
 
         self._signals = NodeItemSignals()
         self._signals.selected.connect(self._on_node_selected)
@@ -191,11 +247,24 @@ class GraphCanvas(QGraphicsView):
             delta = event.position().toPoint() - self._drag_start_view
             dist  = (delta.x() ** 2 + delta.y() ** 2) ** 0.5
             if not self._dragging and dist > 8:
-                self._dragging      = True
-                self._drag_node_id  = self._drag_candidate_id
+                self._dragging     = True
+                self._drag_node_id = self._drag_candidate_id
                 self.setCursor(Qt.CursorShape.DragMoveCursor)
+                # Create the drag ghost.
+                drag_node = self._find_node(self._drag_node_id)
+                if drag_node is not None:
+                    pix = _create_drag_pixmap(drag_node)
+                    self._drag_ghost = QGraphicsPixmapItem(pix)
+                    self._drag_ghost.setOpacity(0.82)
+                    self._drag_ghost.setZValue(1000)
+                    self._drag_ghost.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+                    self._scene.addItem(self._drag_ghost)
             if self._dragging:
                 sp = self.mapToScene(event.position().toPoint())
+                if self._drag_ghost:
+                    self._drag_ghost.setPos(
+                        sp.x() + _DRAG_GHOST_OFFSET, sp.y() + _DRAG_GHOST_OFFSET
+                    )
                 self._update_drop_highlight(sp)
                 event.accept()
                 return
@@ -281,14 +350,18 @@ class GraphCanvas(QGraphicsView):
             drag_node.parent = None
             self._graph.roots.append(drag_node)
 
-        # Nullify before refresh_layout() — it destroys all NodeItems.
+        # Nullify before refresh_layout() — it destroys all scene items.
         self._highlight_item = None
+        self._drag_ghost     = None
 
         self.refresh_layout()
         self.select_node(drag_node.id)
         self.node_active_changed.emit()
 
     def _clear_drag(self) -> None:
+        if self._drag_ghost:
+            self._scene.removeItem(self._drag_ghost)
+            self._drag_ghost = None
         if self._highlight_item:
             self._highlight_item.set_drop_highlight(False)
             self._highlight_item = None
