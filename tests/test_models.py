@@ -1,0 +1,42 @@
+from flower.models.node import Variable, NodeType, Node
+from flower.models.graph import Graph
+
+
+def test_variable_defaults():
+    v = Variable(name="FOO", value="bar")
+    assert v.description == ""
+    assert v.active is True
+    assert v.operation == "="
+
+
+def test_node_type_values():
+    assert NodeType.SCRIPT == "script"
+    assert NodeType.LOOP == "loop"
+    assert NodeType.IF == "if"
+    assert NodeType.DATA == "data"
+    assert NodeType.NOOP == "noop"
+
+
+def test_node_defaults():
+    node = Node(id="n1", name="build", type=NodeType.SCRIPT)
+    assert node.is_active is True
+    assert node.is_collapsed is False
+    assert node.description == ""
+    assert node.variables == []
+    assert node.type_data == {}
+    assert node.children == []
+    assert node.parent is None
+
+
+def test_node_parent_excluded_from_repr():
+    parent = Node(id="p", name="parent", type=NodeType.NOOP)
+    child = Node(id="c", name="child", type=NodeType.NOOP, parent=parent)
+    assert "parent" not in repr(child)
+
+
+def test_graph_defaults():
+    g = Graph()
+    assert g.roots == []
+    assert g.variables == []
+    assert g.created_at == ""
+    assert g.updated_at == ""
