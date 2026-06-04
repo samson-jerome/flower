@@ -4,7 +4,7 @@ from flower.models.node import Node, NodeType
 
 NODE_STEP      = 44.0
 NODE_PADDING_H = 24.0
-MIN_NODE_WIDTH = 120.0
+MIN_NODE_WIDTH = 144.0
 MAX_NODE_WIDTH = 300.0
 NODE_GAP_H     = 20.0  # horizontal gap between a parent column and its children column
 
