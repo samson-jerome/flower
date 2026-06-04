@@ -16,6 +16,26 @@ from flower.io.xml_writer import write_flow
 from flower.io.xml_reader import read_flow
 
 
+def _collect_names(graph: Graph) -> set[str]:
+    names: set[str] = set()
+    def _walk(nodes: list[Node]) -> None:
+        for n in nodes:
+            names.add(n.name)
+            _walk(n.children)
+    _walk(graph.roots)
+    return names
+
+
+def _unique_name(base: str, graph: Graph) -> str:
+    existing = _collect_names(graph)
+    if base not in existing:
+        return base
+    i = 1
+    while f"{base}_{i}" in existing:
+        i += 1
+    return f"{base}_{i}"
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -121,7 +141,7 @@ class MainWindow(QMainWindow):
     # ── Node operations ─────────────────────────────────────────────────────
 
     def _add_child_node(self) -> None:
-        new_node = Node(id=str(uuid.uuid4()), name="nouveau", type=NodeType.NOOP)
+        new_node = Node(id=str(uuid.uuid4()), name=_unique_name("nouveau", self._graph), type=NodeType.NOOP)
         parent_id = self._canvas._selected_id
         if parent_id:
             parent = self._canvas._find_node(parent_id)
