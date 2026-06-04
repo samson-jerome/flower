@@ -1,7 +1,7 @@
 from __future__ import annotations
 from PySide6.QtWidgets import QGraphicsView, QGraphicsScene
 from PySide6.QtGui import QPainter, QKeyEvent, QFontMetrics, QFont
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QPoint
 from flower.models.graph import Graph
 from flower.models.node import Node
 from flower.layout.tree_layout import compute_layout, NodePos
@@ -27,6 +27,7 @@ class GraphCanvas(QGraphicsView):
         self._items:       dict[str, NodeItem] = {}
         self._selected_id: str | None          = None
         self._space_held:  bool                = False
+        self._pan_start:   QPoint              = QPoint()
 
         self._signals = NodeItemSignals()
         self._signals.selected.connect(self._on_node_selected)
@@ -97,6 +98,35 @@ class GraphCanvas(QGraphicsView):
 
     def _on_node_selected(self, node_id: str) -> None:
         self.select_node(node_id)
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.MiddleButton:
+            self._pan_start = event.position().toPoint()
+            self.setCursor(Qt.CursorShape.ClosedHandCursor)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:
+        if event.buttons() & Qt.MouseButton.MiddleButton:
+            delta = event.position().toPoint() - self._pan_start
+            self._pan_start = event.position().toPoint()
+            self.horizontalScrollBar().setValue(
+                self.horizontalScrollBar().value() - delta.x()
+            )
+            self.verticalScrollBar().setValue(
+                self.verticalScrollBar().value() - delta.y()
+            )
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.MiddleButton:
+            self.unsetCursor()
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         if event.key() == Qt.Key.Key_Space:
