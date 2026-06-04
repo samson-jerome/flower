@@ -48,3 +48,67 @@ def test_write_flow_creates_file(tmp_path):
     write_flow(_make_graph(), path)
     assert path.exists()
     assert path.stat().st_size > 0
+
+
+from flower.io.xml_reader import read_flow
+
+
+def test_roundtrip_roots_count(tmp_path):
+    path = tmp_path / "test.flow"
+    write_flow(_make_graph(), path)
+    assert len(read_flow(path).roots) == 1
+
+
+def test_roundtrip_node_name(tmp_path):
+    path = tmp_path / "test.flow"
+    write_flow(_make_graph(), path)
+    assert read_flow(path).roots[0].name == "build"
+
+
+def test_roundtrip_script_body(tmp_path):
+    path = tmp_path / "test.flow"
+    write_flow(_make_graph(), path)
+    assert read_flow(path).roots[0].type_data["body"] == "make build && make test"
+
+
+def test_roundtrip_global_var(tmp_path):
+    path = tmp_path / "test.flow"
+    write_flow(_make_graph(), path)
+    loaded = read_flow(path)
+    assert loaded.variables[0].name == "ENV"
+    assert loaded.variables[0].value == "prod"
+
+
+def test_roundtrip_child_node(tmp_path):
+    path = tmp_path / "test.flow"
+    write_flow(_make_graph(), path)
+    child = read_flow(path).roots[0].children[0]
+    assert child.name == "check"
+    assert child.type == NodeType.IF
+    assert child.type_data["condition"] == "exit_code == 0"
+
+
+def test_roundtrip_child_parent_ref(tmp_path):
+    path = tmp_path / "test.flow"
+    write_flow(_make_graph(), path)
+    loaded = read_flow(path)
+    assert loaded.roots[0].children[0].parent is loaded.roots[0]
+
+
+def test_roundtrip_local_var(tmp_path):
+    path = tmp_path / "test.flow"
+    write_flow(_make_graph(), path)
+    assert read_flow(path).roots[0].variables[0].name == "TARGET"
+
+
+def test_roundtrip_loop(tmp_path):
+    loop = Node(
+        id=str(uuid.uuid4()), name="iter", type=NodeType.LOOP,
+        type_data={"index": "i", "mode": "range", "start": 1, "end": 5, "step": 1, "items": ""},
+    )
+    path = tmp_path / "loop.flow"
+    write_flow(Graph(roots=[loop]), path)
+    d = read_flow(path).roots[0].type_data
+    assert d["index"] == "i"
+    assert d["start"] == 1
+    assert d["end"] == 5
