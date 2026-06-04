@@ -96,9 +96,9 @@ class LoopEditor(QWidget):
         self._mode_range = QRadioButton("Range")
         self._mode_list  = QRadioButton("Liste")
         self._mode_range.setChecked(True)
-        mode_group = QButtonGroup(self)
-        mode_group.addButton(self._mode_range)
-        mode_group.addButton(self._mode_list)
+        self._mode_group = QButtonGroup(self)
+        self._mode_group.addButton(self._mode_range)
+        self._mode_group.addButton(self._mode_list)
 
         self._start = QSpinBox()
         self._start.setRange(-9999, 9999)
