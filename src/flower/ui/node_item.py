@@ -17,9 +17,10 @@ _TYPE_COLORS: dict[NodeType, QColor] = {
 
 
 class NodeItemSignals(QObject):
-    selected       = Signal(str)  # node_id
-    edit_requested = Signal(str)  # node_id
-    active_toggled = Signal(str)  # node_id
+    selected          = Signal(str)  # node_id
+    edit_requested    = Signal(str)  # node_id
+    active_toggled    = Signal(str)  # node_id
+    collapsed_toggled = Signal(str)  # node_id
 
 
 class NodeItem(QGraphicsItem):
@@ -74,30 +75,51 @@ class NodeItem(QGraphicsItem):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(8, int(rect.height() / 2) - 4, 8, 8)
 
-        painter.setPen(QPen(Qt.GlobalColor.white))
         if not self._node.is_active:
             painter.setOpacity(0.5)
+
         n = len(self._node.children)
-        chevron = f" ▸ {n}" if self._node.is_collapsed and n > 0 else (" ▸" if n > 0 else "")
-        text = node_label(self._node) + chevron
+        btn_w = 20.0 if n > 0 else 0.0
+
+        # Label
+        painter.setPen(QPen(Qt.GlobalColor.white))
         painter.drawText(
-            QRectF(20, 0, self._pos.width - 28, NODE_HEIGHT),
+            QRectF(20, 0, self._pos.width - 20 - btn_w, NODE_HEIGHT),
             Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
-            text,
+            node_label(self._node),
         )
+
+        # Collapse / expand button
+        if n > 0:
+            btn_rect = QRectF(self._pos.width - btn_w + 3, (NODE_HEIGHT - 14) / 2, 14, 14)
+            painter.setBrush(QBrush(QColor(255, 255, 255, 40)))
+            painter.setPen(QPen(QColor(255, 255, 255, 100), 1))
+            painter.drawRoundedRect(btn_rect, 3, 3)
+            painter.setPen(QPen(Qt.GlobalColor.white))
+            painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter,
+                             "−" if not self._node.is_collapsed else "+")
+
         painter.setOpacity(1.0)
 
+    def _in_collapse_zone(self, x: float) -> bool:
+        return len(self._node.children) > 0 and x > self._pos.width - 20
+
     def mousePressEvent(self, event) -> None:
-        if event.pos().x() < 20:
+        x = event.pos().x()
+        if x < 20:
             self._signals.active_toggled.emit(self._node.id)
+            event.accept()
+            return
+        if self._in_collapse_zone(x):
+            self._signals.collapsed_toggled.emit(self._node.id)
             event.accept()
             return
         self._signals.selected.emit(self._node.id)
         super().mousePressEvent(event)
 
     def mouseDoubleClickEvent(self, event) -> None:
-        if event.pos().x() < 20:
-            # Double-click on the dot: ignore, single-click already queued the toggle.
+        x = event.pos().x()
+        if x < 20 or self._in_collapse_zone(x):
             event.accept()
             return
         self._signals.edit_requested.emit(self._node.id)
