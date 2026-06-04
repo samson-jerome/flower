@@ -55,6 +55,9 @@ class GraphCanvas(QGraphicsView):
         self._signals.active_toggled.connect(
             self._on_active_toggled, Qt.ConnectionType.QueuedConnection
         )
+        self._signals.collapsed_toggled.connect(
+            self._on_collapsed_toggled, Qt.ConnectionType.QueuedConnection
+        )
 
     # ── Public API ──────────────────────────────────────────────────────────
 
@@ -121,6 +124,17 @@ class GraphCanvas(QGraphicsView):
 
     def _on_node_selected(self, node_id: str) -> None:
         self.select_node(node_id)
+
+    def _on_collapsed_toggled(self, node_id: str) -> None:
+        node = self._find_node(node_id)
+        if node is None:
+            return
+        node.is_collapsed = not node.is_collapsed
+        prev_selected = self._selected_id
+        self.refresh_layout()
+        if prev_selected:
+            self.select_node(prev_selected)
+        self.node_active_changed.emit()
 
     def _on_active_toggled(self, node_id: str) -> None:
         node = self._find_node(node_id)

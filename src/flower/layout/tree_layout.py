@@ -37,8 +37,9 @@ def _collect_widths(node: Node, depth: int, width_fn: Callable[[str], float], wi
     label = node_label(node)
     w = min(MAX_NODE_WIDTH, max(MIN_NODE_WIDTH, width_fn(label) + NODE_PADDING_H))
     widths[depth] = max(widths.get(depth, 0.0), w)
-    for child in node.children:
-        _collect_widths(child, depth + 1, width_fn, widths)
+    if not node.is_collapsed:
+        for child in node.children:
+            _collect_widths(child, depth + 1, width_fn, widths)
 
 
 def _place(
@@ -51,7 +52,7 @@ def _place(
 ) -> float:
     w = widths.get(depth, MIN_NODE_WIDTH)
     positions[node.id] = NodePos(x=col_x.get(depth, 0.0), y=y_start, width=w)
-    if not node.children:
+    if not node.children or node.is_collapsed:
         return y_start + NODE_STEP
     # First child starts at the same Y as the parent.
     y = y_start
