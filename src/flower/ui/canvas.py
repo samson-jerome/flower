@@ -9,6 +9,12 @@ from flower.ui.node_item import NodeItem, NodeItemSignals
 from flower.ui.edge_item import EdgeItem
 
 
+def _deactivate_subtree(node: Node) -> None:
+    for child in node.children:
+        child.is_active = False
+        _deactivate_subtree(child)
+
+
 class GraphCanvas(QGraphicsView):
     node_selected       = Signal(str)  # node_id
     node_edit_requested = Signal(str)  # node_id
@@ -108,6 +114,8 @@ class GraphCanvas(QGraphicsView):
         if node is None:
             return
         node.is_active = not node.is_active
+        if not node.is_active:
+            _deactivate_subtree(node)
         prev_selected = self._selected_id
         self.refresh_layout()
         if prev_selected:
