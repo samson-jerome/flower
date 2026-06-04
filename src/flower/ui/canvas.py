@@ -1,6 +1,6 @@
 from __future__ import annotations
 from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
-from PySide6.QtGui import QPainter, QKeyEvent, QFontMetrics, QFont, QPixmap, QColor, QPen, QBrush
+from PySide6.QtGui import QPainter, QKeyEvent, QFontMetrics, QFont, QPixmap, QColor, QPen, QBrush, QPainterPath
 from PySide6.QtCore import Qt, Signal, QPoint, QPointF, QRectF
 from flower.models.graph import Graph
 from flower.models.node import Node, NodeType
@@ -30,28 +30,102 @@ def _activate_subtree(node: Node) -> None:
 
 _DRAG_GHOST_W       = 180
 _DRAG_GHOST_MAX     = 4    # node + up to 3 children shown
-_DRAG_GHOST_GAP     = 3
-_DRAG_GHOST_OFFSET  = 14   # px offset of ghost from cursor
+_DRAG_GHOST_OFFSET = 14   # px offset of ghost from cursor
+_GHOST_MAX_W       = 600
+_GHOST_MAX_H       = 400
 
 
-def _create_drag_pixmap(node: Node) -> QPixmap:
-    """Render node + first children into a semi-transparent drag preview."""
-    previewed = [node] + ([] if node.is_collapsed else node.children[:_DRAG_GHOST_MAX - 1])
-    has_more  = (not node.is_collapsed) and len(node.children) >= _DRAG_GHOST_MAX
+def _create_drag_pixmap_from_layout(drag_node: Node, items: dict) -> QPixmap:
+    """Render the dragged subtree preserving its actual layout positions."""
 
-    row_h   = int(NODE_HEIGHT)
-    n_rows  = len(previewed)
-    total_h = n_rows * row_h + (n_rows - 1) * _DRAG_GHOST_GAP + (14 if has_more else 0)
+    def collect_visible(node: Node, result: list) -> None:
+        if node.id in items:
+            result.append(node)
+        if not node.is_collapsed:
+            for child in node.children:
+                collect_visible(child, result)
 
-    pix = QPixmap(_DRAG_GHOST_W, total_h)
+    nodes: list[Node] = []
+    collect_visible(drag_node, nodes)
+
+    drag_item = items.get(drag_node.id)
+    if not nodes or drag_item is None:
+        return QPixmap(1, 1)
+
+    origin_x = drag_item._pos.x
+    origin_y = drag_item._pos.y
+
+    # Relative positions: (rx, ry, width)
+    rel: dict[str, tuple[float, float, float]] = {}
+    for n in nodes:
+        it = items.get(n.id)
+        if it:
+            rel[n.id] = (it._pos.x - origin_x, it._pos.y - origin_y, it._pos.width)
+
+    if not rel:
+        return QPixmap(1, 1)
+
+    min_x = min(rx for rx, ry, w in rel.values())
+    min_y = min(ry for rx, ry, w in rel.values())
+    raw_w = max(rx + w for rx, ry, w in rel.values()) - min_x
+    raw_h = max(ry + NODE_HEIGHT for rx, ry, w in rel.values()) - min_y
+
+    pix_w = max(1, min(int(raw_w) + 2, _GHOST_MAX_W))
+    pix_h = max(1, min(int(raw_h) + 2, _GHOST_MAX_H))
+
+    pix = QPixmap(pix_w, pix_h)
     pix.fill(Qt.GlobalColor.transparent)
 
     painter = QPainter(pix)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-    for i, n in enumerate(previewed):
-        y       = i * (row_h + _DRAG_GHOST_GAP)
-        opacity = max(0.12, 1.0 - i * 0.28)
+    # Draw edges beneath nodes
+    for n in nodes:
+        if n.id not in rel:
+            continue
+        prx, pry, prw = rel[n.id]
+        px1 = prx - min_x + prw
+        py1 = pry - min_y + NODE_HEIGHT / 2
+        for child in n.children:
+            if child.id not in rel:
+                continue
+            crx, cry, _ = rel[child.id]
+            cx1 = crx - min_x
+            cy1 = cry - min_y + NODE_HEIGHT / 2
+            mid = (px1 + cx1) / 2
+            r   = min(5.0, abs(cy1 - py1) / 2, abs(cx1 - px1) / 2)
+            path = QPainterPath()
+            path.moveTo(px1, py1)
+            if abs(py1 - cy1) < 1:
+                path.lineTo(cx1, cy1)
+            else:
+                sign = 1.0 if cy1 > py1 else -1.0
+                path.lineTo(mid - r, py1)
+                path.quadTo(mid, py1, mid, py1 + sign * r)
+                path.lineTo(mid, cy1 - sign * r)
+                path.quadTo(mid, cy1, mid + r, cy1)
+                path.lineTo(cx1, cy1)
+            painter.setOpacity(0.25)
+            painter.setPen(QPen(QColor("#888888"), 1))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawPath(path)
+
+    # Draw nodes with depth-based opacity fade
+    for n in nodes:
+        if n.id not in rel:
+            continue
+        rx, ry, rw = rel[n.id]
+        nx = rx - min_x
+        ny = ry - min_y
+        if nx >= pix_w or ny >= pix_h:
+            continue
+
+        depth, curr = 0, n
+        while curr is not drag_node and curr.parent is not None:
+            depth += 1
+            curr = curr.parent
+
+        opacity = max(0.15, 1.0 - depth * 0.18)
         color   = _TYPE_COLORS.get(n.type, QColor("#808080"))
 
         painter.setOpacity(opacity)
@@ -59,24 +133,13 @@ def _create_drag_pixmap(node: Node) -> QPixmap:
         bg.setAlpha(90)
         painter.setBrush(QBrush(bg))
         painter.setPen(QPen(color, 1.5))
-        painter.drawRoundedRect(QRectF(0, y, _DRAG_GHOST_W, row_h), 6, 6)
+        painter.drawRoundedRect(QRectF(nx, ny, rw, NODE_HEIGHT), 6, 6)
 
         painter.setPen(QPen(Qt.GlobalColor.white))
         painter.drawText(
-            QRectF(8, y, _DRAG_GHOST_W - 16, row_h),
+            QRectF(nx + 8, ny, rw - 16, NODE_HEIGHT),
             Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
             node_label(n),
-        )
-
-    if has_more:
-        remaining = len(node.children) - (_DRAG_GHOST_MAX - 1)
-        painter.setOpacity(0.30)
-        painter.setPen(QPen(Qt.GlobalColor.white))
-        y = n_rows * (row_h + _DRAG_GHOST_GAP)
-        painter.drawText(
-            QRectF(8, y, _DRAG_GHOST_W - 16, 14),
-            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
-            f"… +{remaining} nœuds",
         )
 
     painter.end()
@@ -253,7 +316,7 @@ class GraphCanvas(QGraphicsView):
                 # Create the drag ghost.
                 drag_node = self._find_node(self._drag_node_id)
                 if drag_node is not None:
-                    pix = _create_drag_pixmap(drag_node)
+                    pix = _create_drag_pixmap_from_layout(drag_node, self._items)
                     self._drag_ghost = QGraphicsPixmapItem(pix)
                     self._drag_ghost.setOpacity(0.82)
                     self._drag_ghost.setZValue(1000)
