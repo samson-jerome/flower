@@ -52,7 +52,7 @@ class NodeForm(QWidget):
         layout.addWidget(self._vars)
 
     def _on_type_changed(self, _index: int) -> None:
-        self._refresh_type_editor(self._type_combo.currentData())
+        self._refresh_type_editor(NodeType(self._type_combo.currentData()))
 
     def _refresh_type_editor(self, ntype: NodeType) -> None:
         editor = self._type_editors[ntype]
@@ -61,7 +61,7 @@ class NodeForm(QWidget):
         self._stack.setCurrentWidget(editor)
 
     def get_node_data(self) -> dict:
-        ntype = self._type_combo.currentData()
+        ntype = NodeType(self._type_combo.currentData())
         return {
             "name":        self._name.text(),
             "type":        ntype,
