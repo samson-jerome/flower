@@ -1,7 +1,7 @@
 from __future__ import annotations
 from PySide6.QtWidgets import QGraphicsView, QGraphicsScene
 from PySide6.QtGui import QPainter, QKeyEvent, QFontMetrics, QFont
-from PySide6.QtCore import Qt, Signal, QPoint
+from PySide6.QtCore import Qt, Signal, QPoint, QPointF
 from flower.models.graph import Graph
 from flower.models.node import Node
 from flower.layout.tree_layout import compute_layout, NodePos
@@ -44,11 +44,16 @@ class GraphCanvas(QGraphicsView):
         self.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         self.setStyleSheet("background: #1e1e1e;")
 
-        self._graph:       Graph | None        = None
-        self._items:       dict[str, NodeItem] = {}
-        self._selected_id: str | None          = None
-        self._space_held:  bool                = False
-        self._pan_start:   QPoint              = QPoint()
+        self._graph:              Graph | None        = None
+        self._items:              dict[str, NodeItem] = {}
+        self._selected_id:        str | None          = None
+        self._space_held:         bool                = False
+        self._pan_start:          QPoint              = QPoint()
+        self._drag_candidate_id:  str | None          = None
+        self._drag_start_view:    QPoint              = QPoint()
+        self._dragging:           bool                = False
+        self._drag_node_id:       str | None          = None
+        self._highlight_item:     NodeItem | None     = None
 
         self._signals = NodeItemSignals()
         self._signals.selected.connect(self._on_node_selected)
@@ -159,6 +164,15 @@ class GraphCanvas(QGraphicsView):
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
             event.accept()
             return
+        if event.button() == Qt.MouseButton.LeftButton:
+            sp = self.mapToScene(event.position().toPoint())
+            item = self._item_at(sp)
+            if item:
+                local_x = item.mapFromScene(sp).x()
+                w = item.boundingRect().width()
+                if 20 <= local_x <= w - 28:
+                    self._drag_candidate_id = item.node_id
+                    self._drag_start_view   = event.position().toPoint()
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event) -> None:
@@ -173,6 +187,18 @@ class GraphCanvas(QGraphicsView):
             )
             event.accept()
             return
+        if event.buttons() & Qt.MouseButton.LeftButton and self._drag_candidate_id:
+            delta = event.position().toPoint() - self._drag_start_view
+            dist  = (delta.x() ** 2 + delta.y() ** 2) ** 0.5
+            if not self._dragging and dist > 8:
+                self._dragging      = True
+                self._drag_node_id  = self._drag_candidate_id
+                self.setCursor(Qt.CursorShape.DragMoveCursor)
+            if self._dragging:
+                sp = self.mapToScene(event.position().toPoint())
+                self._update_drop_highlight(sp)
+                event.accept()
+                return
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event) -> None:
@@ -180,7 +206,93 @@ class GraphCanvas(QGraphicsView):
             self.unsetCursor()
             event.accept()
             return
+        if event.button() == Qt.MouseButton.LeftButton:
+            if self._dragging:
+                sp = self.mapToScene(event.position().toPoint())
+                self._perform_drop(sp)
+                self._clear_drag()
+                event.accept()
+                return
+            self._drag_candidate_id = None
         super().mouseReleaseEvent(event)
+
+    # ── Drag-to-reparent ────────────────────────────────────────────────────
+
+    def _item_at(self, scene_pos: QPointF) -> NodeItem | None:
+        for item in self._scene.items(scene_pos):
+            if isinstance(item, NodeItem):
+                return item
+        return None
+
+    def _update_drop_highlight(self, scene_pos: QPointF) -> None:
+        candidate = self._item_at(scene_pos)
+        if candidate and (
+            candidate.node_id == self._drag_node_id
+            or self._is_ancestor_of(self._drag_node_id, self._find_node(candidate.node_id))
+        ):
+            candidate = None
+
+        if self._highlight_item is not candidate:
+            if self._highlight_item:
+                self._highlight_item.set_drop_highlight(False)
+            self._highlight_item = candidate
+            if self._highlight_item:
+                self._highlight_item.set_drop_highlight(True)
+
+    def _is_ancestor_of(self, ancestor_id: str | None, node: Node | None) -> bool:
+        """Return True if ancestor_id is in node's ancestor chain (node is a descendant)."""
+        if ancestor_id is None or node is None:
+            return False
+        current = node.parent
+        while current is not None:
+            if current.id == ancestor_id:
+                return True
+            current = current.parent
+        return False
+
+    def _perform_drop(self, scene_pos: QPointF) -> None:
+        if self._drag_node_id is None or self._graph is None:
+            return
+        drag_node = self._find_node(self._drag_node_id)
+        if drag_node is None:
+            return
+
+        target_item = self._item_at(scene_pos)
+        target_node = self._find_node(target_item.node_id) if target_item else None
+
+        # Refuse drop on self or on own descendants.
+        if target_node is not None and (
+            target_node.id == drag_node.id
+            or self._is_ancestor_of(drag_node.id, target_node)
+        ):
+            return
+
+        # Detach from current parent.
+        if drag_node.parent:
+            drag_node.parent.children.remove(drag_node)
+        elif drag_node in self._graph.roots:
+            self._graph.roots.remove(drag_node)
+
+        # Attach to new parent (last child) or as new root.
+        if target_node is not None:
+            drag_node.parent = target_node
+            target_node.children.append(drag_node)
+        else:
+            drag_node.parent = None
+            self._graph.roots.append(drag_node)
+
+        self.refresh_layout()
+        self.select_node(drag_node.id)
+        self.node_active_changed.emit()
+
+    def _clear_drag(self) -> None:
+        if self._highlight_item:
+            self._highlight_item.set_drop_highlight(False)
+            self._highlight_item = None
+        self._dragging          = False
+        self._drag_node_id      = None
+        self._drag_candidate_id = None
+        self.unsetCursor()
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         if event.key() == Qt.Key.Key_Space:

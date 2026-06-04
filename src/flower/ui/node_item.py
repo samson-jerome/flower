@@ -26,10 +26,11 @@ class NodeItemSignals(QObject):
 class NodeItem(QGraphicsItem):
     def __init__(self, node: Node, pos: NodePos, signals: NodeItemSignals):
         super().__init__()
-        self._node     = node
-        self._pos      = pos
-        self._signals  = signals
-        self._selected = False
+        self._node           = node
+        self._pos            = pos
+        self._signals        = signals
+        self._selected       = False
+        self._drop_highlight = False
         self.setPos(pos.x, pos.y)
         self.setAcceptedMouseButtons(Qt.MouseButton.LeftButton)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -43,6 +44,10 @@ class NodeItem(QGraphicsItem):
 
     def set_selected(self, selected: bool) -> None:
         self._selected = selected
+        self.update()
+
+    def set_drop_highlight(self, active: bool) -> None:
+        self._drop_highlight = active
         self.update()
 
     def refresh(self, node: Node, pos: NodePos) -> None:
@@ -100,6 +105,12 @@ class NodeItem(QGraphicsItem):
                              "−" if not self._node.is_collapsed else "+")
 
         painter.setOpacity(1.0)
+
+        # Drop-target highlight (drawn last, always opaque)
+        if self._drop_highlight:
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setPen(QPen(QColor("#ffd700"), 2))
+            painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), radius, radius)
 
     def _in_collapse_zone(self, x: float) -> bool:
         return len(self._node.children) > 0 and x > self._pos.width - 28
