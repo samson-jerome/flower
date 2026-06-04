@@ -281,6 +281,9 @@ class GraphCanvas(QGraphicsView):
             drag_node.parent = None
             self._graph.roots.append(drag_node)
 
+        # Nullify before refresh_layout() — it destroys all NodeItems.
+        self._highlight_item = None
+
         self.refresh_layout()
         self.select_node(drag_node.id)
         self.node_active_changed.emit()
