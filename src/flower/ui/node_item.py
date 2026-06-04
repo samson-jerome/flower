@@ -89,12 +89,16 @@ class NodeItem(QGraphicsItem):
 
     def mousePressEvent(self, event) -> None:
         if event.pos().x() < 20:
-            # Click on the active-state dot — toggle without changing selection.
             self._signals.active_toggled.emit(self._node.id)
-        else:
-            self._signals.selected.emit(self._node.id)
+            event.accept()
+            return
+        self._signals.selected.emit(self._node.id)
         super().mousePressEvent(event)
 
     def mouseDoubleClickEvent(self, event) -> None:
+        if event.pos().x() < 20:
+            # Double-click on the dot: ignore, single-click already queued the toggle.
+            event.accept()
+            return
         self._signals.edit_requested.emit(self._node.id)
         super().mouseDoubleClickEvent(event)
