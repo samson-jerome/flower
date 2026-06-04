@@ -79,7 +79,7 @@ class NodeItem(QGraphicsItem):
             painter.setOpacity(0.5)
 
         n = len(self._node.children)
-        btn_w = 20.0 if n > 0 else 0.0
+        btn_w = 28.0 if n > 0 else 0.0  # zone réservée au bouton (inclut marge droite)
 
         # Label
         painter.setPen(QPen(Qt.GlobalColor.white))
@@ -89,9 +89,9 @@ class NodeItem(QGraphicsItem):
             node_label(self._node),
         )
 
-        # Collapse / expand button
+        # Collapse / expand button (centré dans la zone, avec 8px de marge droite)
         if n > 0:
-            btn_rect = QRectF(self._pos.width - btn_w + 3, (NODE_HEIGHT - 14) / 2, 14, 14)
+            btn_rect = QRectF(self._pos.width - 22.0, (NODE_HEIGHT - 14) / 2, 14, 14)
             painter.setBrush(QBrush(QColor(255, 255, 255, 40)))
             painter.setPen(QPen(QColor(255, 255, 255, 100), 1))
             painter.drawRoundedRect(btn_rect, 3, 3)
@@ -102,7 +102,7 @@ class NodeItem(QGraphicsItem):
         painter.setOpacity(1.0)
 
     def _in_collapse_zone(self, x: float) -> bool:
-        return len(self._node.children) > 0 and x > self._pos.width - 20
+        return len(self._node.children) > 0 and x > self._pos.width - 28
 
     def mousePressEvent(self, event) -> None:
         x = event.pos().x()
