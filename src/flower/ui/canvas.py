@@ -41,6 +41,7 @@ class GraphCanvas(QGraphicsView):
         self.setScene(self._scene)
         self.setDragMode(QGraphicsView.DragMode.NoDrag)
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         self.setStyleSheet("background: #1e1e1e;")
 
         self._graph:       Graph | None        = None
