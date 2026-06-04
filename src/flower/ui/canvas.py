@@ -33,7 +33,9 @@ class GraphCanvas(QGraphicsView):
         self._signals = NodeItemSignals()
         self._signals.selected.connect(self._on_node_selected)
         self._signals.edit_requested.connect(self.node_edit_requested)
-        self._signals.active_toggled.connect(self._on_active_toggled)
+        self._signals.active_toggled.connect(
+            self._on_active_toggled, Qt.ConnectionType.QueuedConnection
+        )
 
     # ── Public API ──────────────────────────────────────────────────────────
 
