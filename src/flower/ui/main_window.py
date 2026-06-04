@@ -153,6 +153,9 @@ class MainWindow(QMainWindow):
     # ── Editor windows ───────────────────────────────────────────────────────
 
     def _open_editor(self, node_id: str) -> None:
+        # Remove stale entries: window accepted/closed but finished signal didn't clean up.
+        if node_id in self._editor_windows and not self._editor_windows[node_id].isVisible():
+            self._editor_windows.pop(node_id)
         if node_id in self._editor_windows:
             win = self._editor_windows[node_id]
             win.raise_()

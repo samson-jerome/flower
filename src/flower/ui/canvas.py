@@ -37,6 +37,9 @@ class GraphCanvas(QGraphicsView):
     def load_graph(self, graph: Graph) -> None:
         self._graph = graph
         self.refresh_layout()
+        # Position view so first root node appears at top-left.
+        self.horizontalScrollBar().setValue(self.horizontalScrollBar().minimum())
+        self.verticalScrollBar().setValue(self.verticalScrollBar().minimum())
 
     def refresh_layout(self) -> None:
         if self._graph is None:
@@ -46,6 +49,15 @@ class GraphCanvas(QGraphicsView):
         fm = QFontMetrics(QFont())
         positions = compute_layout(self._graph.roots, fm.horizontalAdvance)
         self._draw(self._graph.roots, positions)
+        self._update_scene_rect()
+
+    def _update_scene_rect(self) -> None:
+        """Limit pan to the bounding rect of all nodes (plus margin)."""
+        rect = self._scene.itemsBoundingRect()
+        if rect.isNull():
+            return
+        margin = 20.0
+        self.setSceneRect(rect.adjusted(-margin, -margin, margin, margin))
 
     def select_node(self, node_id: str) -> None:
         for nid, item in self._items.items():
