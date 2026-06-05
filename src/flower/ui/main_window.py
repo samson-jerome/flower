@@ -3,14 +3,14 @@ import uuid
 from pathlib import Path
 from datetime import datetime, timezone
 from PySide6.QtWidgets import (
-    QMainWindow, QSplitter, QMessageBox, QFileDialog,
+    QMainWindow, QSplitter, QMessageBox, QFileDialog, QLabel,
 )
 from PySide6.QtCore import Qt
 from flower.models.graph import Graph
 from flower.models.node import Node, NodeType
 from flower.ui.canvas import GraphCanvas
 from flower.ui.toolbar import ToolBar
-from flower.ui.info_panel import InfoPanel
+from flower.ui.dock_panel import DockPanel
 from flower.ui.editor.editor_window import EditorWindow
 from flower.io.xml_writer import write_flow
 from flower.io.xml_reader import read_flow
@@ -47,19 +47,22 @@ class MainWindow(QMainWindow):
         self._dirty:           bool                      = False
         self._editor_windows:  dict[str, EditorWindow]   = {}
 
-        self._toolbar = ToolBar(self)
-        self._canvas  = GraphCanvas()
-        self._info    = InfoPanel()
+        self._toolbar    = ToolBar(self)
+        self._canvas     = GraphCanvas()
+        self._dock_panel = DockPanel()
 
         self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, self._toolbar)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self._canvas)
-        splitter.addWidget(self._info)
+        splitter.addWidget(self._dock_panel)
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 0)
         splitter.setSizes([800, 300])
         self.setCentralWidget(splitter)
+
+        self._status_node_label = QLabel()
+        self.statusBar().addWidget(self._status_node_label)
 
         self._build_menu()
         self._connect_signals()
@@ -86,7 +89,9 @@ class MainWindow(QMainWindow):
         self._toolbar.delete_node_requested.connect(self._delete_selected_node)
         self._toolbar.refresh_requested.connect(self._canvas.refresh_layout)
         self._toolbar.export_requested.connect(self._save_as)
-        self._info.edit_requested.connect(self._open_editor)
+        self._dock_panel.undock_requested.connect(self._on_undock_requested)
+        self._dock_panel.close_requested.connect(self._on_dock_close_requested)
+        self._dock_panel.name_changed.connect(self._on_name_changed)
 
     # ── File operations ─────────────────────────────────────────────────────
 
@@ -106,7 +111,9 @@ class MainWindow(QMainWindow):
         self._path  = None
         self._dirty = False
         self._close_all_editors()
+        self._dock_panel.clear()
         self._canvas.load_graph(self._graph)
+        self._status_node_label.clear()
         self._update_title()
 
     def _open_file(self) -> None:
@@ -119,7 +126,9 @@ class MainWindow(QMainWindow):
         self._path  = Path(path)
         self._dirty = False
         self._close_all_editors()
+        self._dock_panel.clear()
         self._canvas.load_graph(self._graph)
+        self._status_node_label.clear()
         self._update_title()
 
     def _save_file(self) -> None:
@@ -130,6 +139,7 @@ class MainWindow(QMainWindow):
         write_flow(self._graph, self._path)
         self._dirty = False
         self._update_title()
+        self.statusBar().showMessage("Fichier sauvegardé", 3000)
 
     def _save_as(self) -> None:
         path, _ = QFileDialog.getSaveFileName(self, "Sauver sous", "", "Flow files (*.flow)")
@@ -168,14 +178,15 @@ class MainWindow(QMainWindow):
         elif node in self._graph.roots:
             self._graph.roots.remove(node)
         self._close_editor(node_id)
+        self._dock_panel.remove(node_id)
         self.mark_dirty()
         self._canvas.refresh_layout()
-        self._info.clear()
+        self._status_node_label.clear()
+        self.statusBar().showMessage("Nœud supprimé", 3000)
 
     # ── Editor windows ───────────────────────────────────────────────────────
 
     def _open_editor(self, node_id: str) -> None:
-        # Remove stale entries: window accepted/closed but finished signal didn't clean up.
         if node_id in self._editor_windows and not self._editor_windows[node_id].isVisible():
             self._editor_windows.pop(node_id)
         if node_id in self._editor_windows:
@@ -188,6 +199,7 @@ class MainWindow(QMainWindow):
             return
         win = EditorWindow(node, parent=None)
         win.node_updated.connect(self._on_node_updated)
+        win.dock_requested.connect(self._on_dock_requested)
         win.finished.connect(lambda _: self._editor_windows.pop(node_id, None))
         self._editor_windows[node_id] = win
         win.show()
@@ -205,16 +217,59 @@ class MainWindow(QMainWindow):
         self.mark_dirty()
         self._canvas.refresh_layout()
         self._canvas.select_node(node_id)
-        self._info.show_node(node)
+        self._update_status_node(node)
 
     # ── Selection ────────────────────────────────────────────────────────────
 
     def _on_node_selected(self, node_id: str) -> None:
         node = self._canvas._find_node(node_id)
         if node:
-            self._info.show_node(node)
+            self._update_status_node(node)
+
+    # ── Dock handlers ────────────────────────────────────────────────────────
+
+    def _on_dock_requested(self, node_id: str) -> None:
+        win = self._editor_windows.get(node_id)
+        if win is None:
+            return
+        node = self._canvas._find_node(node_id)
+        if node is None:
+            return
+        form = win.extract_form()
+        # Disconnect finished signal before closing to avoid pop-from-dict race.
+        win.finished.disconnect()
+        win.close()
+        self._editor_windows.pop(node_id, None)
+        self._dock_panel.dock(node_id, node, form)
+
+    def _on_undock_requested(self, node_id: str) -> None:
+        node = self._canvas._find_node(node_id)
+        if node is None:
+            return
+        form = self._dock_panel.undock(node_id)
+        win = EditorWindow(node, form=form, parent=None)
+        win.node_updated.connect(self._on_node_updated)
+        win.dock_requested.connect(self._on_dock_requested)
+        win.finished.connect(lambda _: self._editor_windows.pop(node_id, None))
+        self._editor_windows[node_id] = win
+        win.show()
+
+    def _on_dock_close_requested(self, node_id: str) -> None:
+        self._dock_panel.remove(node_id)
+
+    def _on_name_changed(self, node_id: str, new_name: str) -> None:
+        node = self._canvas._find_node(node_id)
+        if node is None:
+            return
+        node.name = new_name
+        self.mark_dirty()
+        self._canvas.refresh_layout()
 
     # ── Helpers ──────────────────────────────────────────────────────────────
+
+    def _update_status_node(self, node: Node) -> None:
+        active = "actif" if node.is_active else "inactif"
+        self._status_node_label.setText(f"{node.type} · {node.name} · {active}")
 
     def mark_dirty(self) -> None:
         self._dirty = True
