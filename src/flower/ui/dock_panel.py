@@ -98,7 +98,6 @@ class DockPanel(QWidget):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(scroll)
-        self.show()
 
     # ── Public API ───────────────────────────────────────────────────────────
 
@@ -122,7 +121,9 @@ class DockPanel(QWidget):
         return form
 
     def remove(self, node_id: str) -> None:
-        entry = self._entries.pop(node_id)
+        entry = self._entries.pop(node_id, None)
+        if entry is None:
+            return
         self._layout.removeWidget(entry)
         entry.deleteLater()
 

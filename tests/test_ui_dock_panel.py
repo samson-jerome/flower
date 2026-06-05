@@ -92,6 +92,7 @@ def test_name_changed_signal(qapp):
 
 def test_collapse_toggle_hides_body(qapp):
     panel = DockPanel()
+    panel.show()
     node = _node()
     panel.dock(node.id, node, _form(node))
     entry = panel._entries[node.id]
