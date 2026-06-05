@@ -237,7 +237,10 @@ class MainWindow(QMainWindow):
             return
         form = win.extract_form()
         # Disconnect finished signal before closing to avoid pop-from-dict race.
-        win.finished.disconnect()
+        try:
+            win.finished.disconnect()
+        except RuntimeError:
+            pass
         win.close()
         self._editor_windows.pop(node_id, None)
         self._dock_panel.dock(node_id, node, form)
@@ -246,6 +249,9 @@ class MainWindow(QMainWindow):
         node = self._canvas._find_node(node_id)
         if node is None:
             return
+        if node_id not in self._dock_panel._entries:
+            return
+        self._close_editor(node_id)
         form = self._dock_panel.undock(node_id)
         win = EditorWindow(node, form=form, parent=None)
         win.node_updated.connect(self._on_node_updated)
@@ -264,6 +270,9 @@ class MainWindow(QMainWindow):
         node.name = new_name
         self.mark_dirty()
         self._canvas.refresh_layout()
+        win = self._editor_windows.get(node_id)
+        if win:
+            win.setWindowTitle(f"Éditer — {node.type} · {new_name}")
 
     # ── Helpers ──────────────────────────────────────────────────────────────
 
