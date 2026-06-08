@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from PySide6.QtWidgets import (
     QMainWindow, QSplitter, QMessageBox, QFileDialog, QLabel,
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QSettings
 from flower.models.graph import Graph
 from flower.models.node import Node, NodeType
 from flower.ui.canvas import GraphCanvas
@@ -74,6 +74,8 @@ class MainWindow(QMainWindow):
         file_menu = self.menuBar().addMenu("Fichier")
         file_menu.addAction("Nouveau",       self._new_file,  "Ctrl+N")
         file_menu.addAction("Ouvrir…",       self._open_file, "Ctrl+O")
+        self._recent_menu = file_menu.addMenu("Ouvrir récents")
+        self._refresh_recent_menu()
         file_menu.addAction("Sauver",        self._save_file, "Ctrl+S")
         file_menu.addAction("Sauver sous…",  self._save_as,   "Ctrl+Shift+S")
         file_menu.addSeparator()
@@ -122,14 +124,22 @@ class MainWindow(QMainWindow):
         path, _ = QFileDialog.getOpenFileName(self, "Ouvrir", "", "Flow files (*.flow)")
         if not path:
             return
-        self._graph = read_flow(Path(path))
-        self._path  = Path(path)
+        self._open_path(Path(path))
+
+    def _open_path(self, path: Path) -> None:
+        if not path.exists():
+            QMessageBox.warning(self, "Fichier introuvable", f"Le fichier n'existe plus :\n{path}")
+            self._remove_recent(path)
+            return
+        self._graph = read_flow(path)
+        self._path  = path
         self._dirty = False
         self._close_all_editors()
         self._dock_panel.clear()
         self._canvas.load_graph(self._graph)
         self._status_node_label.clear()
         self._update_title()
+        self._add_recent(path)
 
     def _save_file(self) -> None:
         if self._path is None:
@@ -140,6 +150,7 @@ class MainWindow(QMainWindow):
         self._dirty = False
         self._update_title()
         self.statusBar().showMessage("Fichier sauvegardé", 3000)
+        self._add_recent(self._path)
 
     def _save_as(self) -> None:
         path, _ = QFileDialog.getSaveFileName(self, "Sauver sous", "", "Flow files (*.flow)")
@@ -275,6 +286,57 @@ class MainWindow(QMainWindow):
             win.setWindowTitle(f"Éditer — {node.type} · {new_name}")
 
     # ── Helpers ──────────────────────────────────────────────────────────────
+
+    _MAX_RECENT = 20
+
+    def _recent_paths(self) -> list[str]:
+        settings = QSettings()
+        value = settings.value("recentFiles", [])
+        if isinstance(value, str):
+            value = [value]
+        return [str(v) for v in (value or []) if v]
+
+    def _save_recent_paths(self, paths: list[str]) -> None:
+        QSettings().setValue("recentFiles", paths)
+
+    def _add_recent(self, path: Path) -> None:
+        p = str(path.resolve())
+        items = [x for x in self._recent_paths() if x != p]
+        items.insert(0, p)
+        self._save_recent_paths(items[: self._MAX_RECENT])
+        self._refresh_recent_menu()
+
+    def _remove_recent(self, path: Path) -> None:
+        p = str(path.resolve())
+        items = [x for x in self._recent_paths() if x != p]
+        self._save_recent_paths(items)
+        self._refresh_recent_menu()
+
+    def _refresh_recent_menu(self) -> None:
+        menu = self._recent_menu
+        menu.clear()
+        items = self._recent_paths()
+        if not items:
+            act = menu.addAction("(aucun)")
+            act.setEnabled(False)
+            return
+        for p in items:
+            path = Path(p)
+            act = menu.addAction(f"{path.name}  —  {path.parent}")
+            act.setToolTip(p)
+            act.triggered.connect(lambda _checked=False, path=path: self._open_recent(path))
+        menu.addSeparator()
+        clear_act = menu.addAction("Vider la liste")
+        clear_act.triggered.connect(self._clear_recent)
+
+    def _open_recent(self, path: Path) -> None:
+        if not self._confirm_discard():
+            return
+        self._open_path(path)
+
+    def _clear_recent(self) -> None:
+        self._save_recent_paths([])
+        self._refresh_recent_menu()
 
     def _update_status_node(self, node: Node) -> None:
         active = "actif" if node.is_active else "inactif"

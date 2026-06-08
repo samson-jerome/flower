@@ -10,6 +10,7 @@ ICON_PATH = Path(__file__).resolve().parents[2] / "assets" / "app-icon.png"
 
 def main() -> None:
     app = QApplication(sys.argv)
+    app.setOrganizationName("Flower")
     app.setApplicationName("Flower")
     app.setDesktopFileName("flower")
     icon = QIcon(str(ICON_PATH))
