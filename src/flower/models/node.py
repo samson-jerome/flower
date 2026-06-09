@@ -28,6 +28,7 @@ class Node:
     is_active:    bool           = True
     is_collapsed: bool           = False
     description:  str            = ""
+    notes:        str            = ""
     variables:    list[Variable] = field(default_factory=list)
     type_data:    dict           = field(default_factory=dict)
     children:     list[Node]     = field(default_factory=list)

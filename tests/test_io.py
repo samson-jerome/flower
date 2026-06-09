@@ -112,3 +112,28 @@ def test_roundtrip_loop(tmp_path):
     assert d["index"] == "i"
     assert d["start"] == 1
     assert d["end"] == 5
+
+
+def test_roundtrip_graph_notes(tmp_path):
+    g = _make_graph()
+    g.notes = "Global notes <with> & special chars\nmultiline"
+    path = tmp_path / "notes.flow"
+    write_flow(g, path)
+    assert read_flow(path).notes == "Global notes <with> & special chars\nmultiline"
+
+
+def test_roundtrip_node_notes(tmp_path):
+    g = _make_graph()
+    g.roots[0].notes = "Build step notes\nline 2"
+    path = tmp_path / "node-notes.flow"
+    write_flow(g, path)
+    assert read_flow(path).roots[0].notes == "Build step notes\nline 2"
+
+
+def test_missing_notes_defaults_to_empty(tmp_path):
+    # Backward compat: a .flow without <notes> elements still loads
+    path = tmp_path / "no-notes.flow"
+    write_flow(_make_graph(), path)
+    loaded = read_flow(path)
+    assert loaded.notes == ""
+    assert loaded.roots[0].notes == ""

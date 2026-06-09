@@ -7,5 +7,6 @@ from flower.models.node import Node, Variable
 class Graph:
     roots:      list[Node]     = field(default_factory=list)
     variables:  list[Variable] = field(default_factory=list)
+    notes:      str            = ""
     created_at: str            = ""
     updated_at: str            = ""
