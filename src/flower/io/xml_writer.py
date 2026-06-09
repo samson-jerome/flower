@@ -19,6 +19,7 @@ def _node_to_xml(node: Node, parent_el) -> None:
         collapsed="1" if node.is_collapsed else "0",
     )
     etree.SubElement(node_el, "description").text = node.description
+    etree.SubElement(node_el, "notes").text = etree.CDATA(node.notes or "")
 
     vars_el = etree.SubElement(node_el, "vars")
     for v in node.variables:
@@ -51,6 +52,7 @@ def graph_to_xml(graph: Graph) -> bytes:
     info = etree.SubElement(root, "info")
     etree.SubElement(info, "created_at").text = graph.created_at
     etree.SubElement(info, "updated_at").text = graph.updated_at
+    etree.SubElement(info, "notes").text = etree.CDATA(graph.notes or "")
 
     vars_el = etree.SubElement(root, "vars")
     for v in graph.variables:

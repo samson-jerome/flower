@@ -31,6 +31,7 @@ def _read_node(el, parent: Node | None = None) -> Node:
         is_active=el.get("active", "1") == "1",
         is_collapsed=el.get("collapsed", "0") == "1",
         description=el.findtext("description", "") or "",
+        notes=el.findtext("notes", "") or "",
         variables=_read_vars(el),
         parent=parent,
     )
@@ -68,6 +69,7 @@ def read_flow(path: Path) -> Graph:
     info = root.find("info")
     created_at = info.findtext("created_at", "") if info is not None else ""
     updated_at = info.findtext("updated_at", "") if info is not None else ""
+    notes      = info.findtext("notes", "")      if info is not None else ""
 
     children_el = root.find("children")
     roots = [_read_node(el) for el in children_el.findall("node")] if children_el is not None else []
@@ -75,6 +77,7 @@ def read_flow(path: Path) -> Graph:
     return Graph(
         roots=roots,
         variables=_read_vars(root),
+        notes=notes or "",
         created_at=created_at or "",
         updated_at=updated_at or "",
     )

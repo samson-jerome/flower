@@ -11,6 +11,7 @@ from flower.models.node import Node, NodeType
 from flower.ui.canvas import GraphCanvas
 from flower.ui.toolbar import ToolBar
 from flower.ui.dock_panel import DockPanel
+from flower.ui.notes_panel import NotesPanel, bind_notes_to_splitter
 from flower.ui.editor.editor_window import EditorWindow
 from flower.io.xml_writer import write_flow
 from flower.io.xml_reader import read_flow
@@ -50,11 +51,21 @@ class MainWindow(QMainWindow):
         self._toolbar    = ToolBar(self)
         self._canvas     = GraphCanvas()
         self._dock_panel = DockPanel()
+        self._notes      = NotesPanel(title="Notes du flow")
+        self._notes.text_changed.connect(self._on_notes_changed)
 
         self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, self._toolbar)
 
+        notes_canvas = QSplitter(Qt.Orientation.Vertical)
+        notes_canvas.addWidget(self._notes)
+        notes_canvas.addWidget(self._canvas)
+        notes_canvas.setStretchFactor(0, 0)
+        notes_canvas.setStretchFactor(1, 1)
+        notes_canvas.setSizes([120, 580])
+        bind_notes_to_splitter(self._notes, notes_canvas, index=0)
+
         splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.addWidget(self._canvas)
+        splitter.addWidget(notes_canvas)
         splitter.addWidget(self._dock_panel)
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 0)
@@ -67,6 +78,7 @@ class MainWindow(QMainWindow):
         self._build_menu()
         self._connect_signals()
         self._canvas.load_graph(self._graph)
+        self._sync_notes_from_graph()
 
     # ── Menu ────────────────────────────────────────────────────────────────
 
@@ -115,6 +127,7 @@ class MainWindow(QMainWindow):
         self._close_all_editors()
         self._dock_panel.clear()
         self._canvas.load_graph(self._graph)
+        self._sync_notes_from_graph()
         self._status_node_label.clear()
         self._update_title()
 
@@ -137,6 +150,7 @@ class MainWindow(QMainWindow):
         self._close_all_editors()
         self._dock_panel.clear()
         self._canvas.load_graph(self._graph)
+        self._sync_notes_from_graph()
         self._status_node_label.clear()
         self._update_title()
         self._add_recent(path)
@@ -284,6 +298,15 @@ class MainWindow(QMainWindow):
         win = self._editor_windows.get(node_id)
         if win:
             win.setWindowTitle(f"Éditer — {node.type} · {new_name}")
+
+    def _on_notes_changed(self, text: str) -> None:
+        if self._graph.notes == text:
+            return
+        self._graph.notes = text
+        self.mark_dirty()
+
+    def _sync_notes_from_graph(self) -> None:
+        self._notes.set_text(self._graph.notes)
 
     # ── Helpers ──────────────────────────────────────────────────────────────
 
