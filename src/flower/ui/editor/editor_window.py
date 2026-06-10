@@ -21,7 +21,7 @@ class EditorWindow(QDialog):
         self._node = node
         self._form = form if form is not None else NodeForm(node)
 
-        self._notes = NotesPanel(title="Notes")
+        self._notes = NotesPanel(title="Description")
         self._notes.set_text(node.notes)
 
         self._scroll = QScrollArea()
