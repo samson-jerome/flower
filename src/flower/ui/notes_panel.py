@@ -14,7 +14,7 @@ class NotesPanel(QWidget):
     text_changed = Signal(str)
     collapsed_changed = Signal(bool)
 
-    def __init__(self, title: str = "Notes", parent=None):
+    def __init__(self, title: str = "Description", parent=None):
         super().__init__(parent)
 
         self._toggle = QCheckBox(title)
@@ -27,7 +27,7 @@ class NotesPanel(QWidget):
         header.addStretch()
 
         self._editor = QTextEdit()
-        self._editor.setPlaceholderText("Notes…")
+        self._editor.setPlaceholderText("Add a description...")
         self._editor.textChanged.connect(
             lambda: self.text_changed.emit(self._editor.toPlainText())
         )

@@ -51,7 +51,7 @@ class MainWindow(QMainWindow):
         self._toolbar    = ToolBar(self)
         self._canvas     = GraphCanvas()
         self._dock_panel = DockPanel()
-        self._notes      = NotesPanel(title="Notes du flow")
+        self._notes      = NotesPanel(title="Description")
         self._notes.text_changed.connect(self._on_notes_changed)
 
         self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, self._toolbar)
