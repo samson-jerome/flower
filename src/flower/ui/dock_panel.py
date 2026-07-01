@@ -25,9 +25,7 @@ class DockEntry(QWidget):
         self._toggle_btn.clicked.connect(self._toggle_collapse)
 
         self._name_edit = QLineEdit(node_name)
-        self._name_edit.editingFinished.connect(
-            lambda: self.name_changed.emit(self._node_id, self._name_edit.text())
-        )
+        self._name_edit.editingFinished.connect(self._on_name_edited)
 
         self._undock_btn = QPushButton("↗")
         self._undock_btn.setFixedWidth(24)
@@ -51,6 +49,8 @@ class DockEntry(QWidget):
 
         self._body = form
         self._body.setParent(self)
+        # The header already shows an editable name; hide the form's name row.
+        self._body.set_name_visible(False)
 
         separator = QFrame()
         separator.setFrameShape(QFrame.Shape.HLine)
@@ -62,6 +62,12 @@ class DockEntry(QWidget):
         layout.addWidget(separator)
         layout.addWidget(self._body)
 
+    def _on_name_edited(self) -> None:
+        # Keep the hidden form field in sync so a later save after undocking
+        # does not overwrite the name with a stale value.
+        self._body.set_name(self._name_edit.text())
+        self.name_changed.emit(self._node_id, self._name_edit.text())
+
     def _toggle_collapse(self) -> None:
         self._collapsed = not self._collapsed
         self._body.setVisible(not self._collapsed)
@@ -70,6 +76,7 @@ class DockEntry(QWidget):
     def extract_form(self) -> NodeForm:
         """Retire le NodeForm de ce DockEntry sans le détruire."""
         form = self._body
+        form.set_name_visible(True)
         form.setParent(None)
         return form
 
