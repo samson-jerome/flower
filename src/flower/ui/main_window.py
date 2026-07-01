@@ -13,6 +13,7 @@ from flower.ui.toolbar import ToolBar
 from flower.ui.dock_panel import DockPanel
 from flower.ui.notes_panel import NotesPanel, bind_notes_to_splitter
 from flower.ui.editor.editor_window import EditorWindow
+from flower.ui.preferences_dialog import PreferencesDialog
 from flower.io.xml_writer import write_flow
 from flower.io.xml_reader import read_flow
 
@@ -91,7 +92,12 @@ class MainWindow(QMainWindow):
         file_menu.addAction("Sauver",        self._save_file, "Ctrl+S")
         file_menu.addAction("Sauver sous…",  self._save_as,   "Ctrl+Shift+S")
         file_menu.addSeparator()
+        file_menu.addAction("Préférences…",  self._open_preferences)
+        file_menu.addSeparator()
         file_menu.addAction("Quitter",       self.close,      "Ctrl+Q")
+
+    def _open_preferences(self) -> None:
+        PreferencesDialog(self).exec()
 
     def _connect_signals(self) -> None:
         self._canvas.node_selected.connect(self._on_node_selected)
