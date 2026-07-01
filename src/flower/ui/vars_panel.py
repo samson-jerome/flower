@@ -4,36 +4,40 @@ from PySide6.QtWidgets import (
     QPushButton, QCheckBox, QHeaderView,
 )
 from flower.models.node import Variable
+from flower.ui.notes_panel import CollapsibleSection
 
 
-class VarsPanel(QWidget):
-    """Tableau éditable de Variables (globales ou locales)."""
+class VarsPanel(CollapsibleSection):
+    """Tableau éditable de Variables (globales ou locales), repliable."""
 
     COLUMNS = ("Nom", "Valeur", "Description", "Actif", "Op.")
 
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._table = QTableWidget(0, len(self.COLUMNS))
-        self._table.setHorizontalHeaderLabels(list(self.COLUMNS))
-        self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+    def __init__(self, title: str = "Variables", parent=None):
+        table = QTableWidget(0, len(self.COLUMNS))
+        table.setHorizontalHeaderLabels(list(self.COLUMNS))
+        table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
 
         add_btn = QPushButton("+")
         add_btn.setFixedWidth(28)
         del_btn = QPushButton("−")
         del_btn.setFixedWidth(28)
-        add_btn.clicked.connect(self._add_row)
-        del_btn.clicked.connect(self._delete_selected)
 
         btn_layout = QHBoxLayout()
         btn_layout.addWidget(add_btn)
         btn_layout.addWidget(del_btn)
         btn_layout.addStretch()
 
-        layout = QVBoxLayout(self)
+        content = QWidget()
+        layout = QVBoxLayout(content)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addLayout(btn_layout)
-        layout.addWidget(self._table)
+        layout.addWidget(table)
+
+        super().__init__(title, content, parent)
+        self._table = table
+        add_btn.clicked.connect(self._add_row)
+        del_btn.clicked.connect(self._delete_selected)
 
     def _add_row(self):
         row = self._table.rowCount()
