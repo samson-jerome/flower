@@ -3,6 +3,7 @@ from pathlib import Path
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 from flower.ui.main_window import MainWindow
+from flower.ui.theme import apply_theme, load_theme, watch_system_theme
 
 
 ICON_PATH = Path(__file__).resolve().parents[2] / "assets" / "app-icon.png"
@@ -13,6 +14,8 @@ def main() -> None:
     app.setOrganizationName("Flower")
     app.setApplicationName("Flower")
     app.setDesktopFileName("flower")
+    apply_theme(app, load_theme())
+    watch_system_theme(app)
     icon = QIcon(str(ICON_PATH))
     app.setWindowIcon(icon)
     window = MainWindow()
