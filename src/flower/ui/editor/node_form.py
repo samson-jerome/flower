@@ -39,7 +39,8 @@ class NodeForm(QWidget):
         self._vars = VarsPanel()
         self._vars.set_variables(node.variables)
 
-        form = QFormLayout()
+        self._form_layout = QFormLayout()
+        form = self._form_layout
         form.addRow("Type:", self._type_combo)
         form.addRow("Nom:", self._name)
         form.addRow("Actif:", self._active)
@@ -50,6 +51,17 @@ class NodeForm(QWidget):
         layout.addWidget(self._stack)
         layout.addWidget(QLabel("Variables locales:"))
         layout.addWidget(self._vars)
+
+    def set_name_visible(self, visible: bool) -> None:
+        """Hide the name row when the form is docked (the dock header already
+        shows an editable name)."""
+        label = self._form_layout.labelForField(self._name)
+        if label:
+            label.setVisible(visible)
+        self._name.setVisible(visible)
+
+    def set_name(self, name: str) -> None:
+        self._name.setText(name)
 
     def _on_type_changed(self, _index: int) -> None:
         self._refresh_type_editor(NodeType(self._type_combo.currentData()))

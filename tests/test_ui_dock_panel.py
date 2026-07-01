@@ -90,6 +90,27 @@ def test_name_changed_signal(qapp):
     assert received == [(node.id, "beta")]
 
 
+def test_dock_hides_form_name_row_and_undock_restores_it(qapp):
+    panel = DockPanel()
+    node = _node()
+    form = _form(node)
+    panel.dock(node.id, node, form)
+    assert form._name.isHidden()
+    returned = panel.undock(node.id)
+    assert not returned._name.isHidden()
+
+
+def test_header_name_edit_syncs_form_name(qapp):
+    panel = DockPanel()
+    node = _node("alpha")
+    form = _form(node)
+    panel.dock(node.id, node, form)
+    entry = panel._entries[node.id]
+    entry._name_edit.setText("beta")
+    entry._name_edit.editingFinished.emit()
+    assert form._name.text() == "beta"
+
+
 def test_collapse_toggle_hides_body(qapp):
     panel = DockPanel()
     panel.show()
