@@ -189,7 +189,8 @@ class MainWindow(QMainWindow):
             self._graph.roots.append(new_node)
         self.mark_dirty()
         self._canvas.refresh_layout()
-        self._canvas.select_node(new_node.id)
+        if parent_id:
+            self._canvas.select_node(parent_id)
 
     def _delete_selected_node(self) -> None:
         node_id = self._canvas._selected_id
