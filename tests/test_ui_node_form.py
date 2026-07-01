@@ -27,3 +27,32 @@ def test_node_form_apply_to_node(qapp):
     updated = form.apply_to_node()
     assert updated.name == "deploy"
     assert updated is node
+
+
+def test_description_section_edits_node_description(qapp):
+    node = _make_node()
+    node.description = "initial"
+    form = NodeForm(node)
+    assert form._description.text() == "initial"
+    form._description.set_text("updated")
+    assert form.apply_to_node().description == "updated"
+
+
+def test_variables_checkbox_collapses_section(qapp):
+    node = _make_node()
+    form = NodeForm(node)
+    form.show()
+    assert form._vars._content.isVisible()
+    form._vars._toggle.click()
+    assert not form._vars._content.isVisible()
+    assert form._vars._toggle.isVisible()  # header stays
+    form._vars._toggle.click()
+    assert form._vars._content.isVisible()
+
+
+def test_variables_survive_collapse(qapp):
+    node = _make_node()
+    form = NodeForm(node)
+    form._vars.set_collapsed(True)
+    data = form.get_node_data()
+    assert [v.name for v in data["variables"]] == ["X"]
