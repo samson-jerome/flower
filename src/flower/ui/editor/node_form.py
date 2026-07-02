@@ -2,17 +2,24 @@ from __future__ import annotations
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QFormLayout,
     QLineEdit, QCheckBox, QComboBox, QStackedWidget, QSplitter, QScrollArea,
+    QApplication,
 )
 from PySide6.QtCore import Qt
 from flower.models.node import Node, NodeType
 from flower.ui.editor.type_editors import make_type_editor
 from flower.ui.vars_panel import VarsPanel
 from flower.ui.notes_panel import NotesPanel, bind_notes_to_splitter
+from flower.ui.theme import is_dark
 
-DESCRIPTION_BG = "#898989"   # gris souris
-DESCRIPTION_TEXT = "#F0F0F0"   # gris souris
-VARIABLES_BG   = "#2e5f66"   # bleu pétrole
-VARIABLES_TEXT = "#f0f0f0"
+# (background, text) pairs, keyed by whether the app is currently dark.
+_DESCRIPTION_COLORS = {
+    True:  ("#898989", "#F0F0F0"),   # gris souris
+    False: ("#D8D8D8", "#2B2B2B"),   # gris souris clair
+}
+_VARIABLES_COLORS = {
+    True:  ("#2E5F66", "#F0F0F0"),   # bleu pétrole
+    False: ("#CFE6E9", "#1B3A40"),   # bleu pétrole clair
+}
 
 
 class NodeForm(QWidget):
@@ -30,12 +37,15 @@ class NodeForm(QWidget):
         # ── Section 1 : description ──────────────────────────────────────────
         self._description = NotesPanel(title="Description")
         self._description.set_text(node.description)
-        self._description.set_theme(DESCRIPTION_BG, DESCRIPTION_TEXT)
 
         # ── Section 2 : variables ────────────────────────────────────────────
         self._vars = VarsPanel(title="Variables")
         self._vars.set_variables(node.variables)
-        self._vars.set_theme(VARIABLES_BG, VARIABLES_TEXT)
+
+        self._apply_theme_colors()
+        app = QApplication.instance()
+        if app is not None:
+            app.paletteChanged.connect(self._apply_theme_colors)
 
         # ── Section 3 : corps du nœud ────────────────────────────────────────
         self._type_combo = QComboBox()
@@ -88,6 +98,13 @@ class NodeForm(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self._splitter)
+
+    def _apply_theme_colors(self, *_args) -> None:
+        dark = is_dark(QApplication.instance())
+        bg, text = _DESCRIPTION_COLORS[dark]
+        self._description.set_theme(bg, text)
+        bg, text = _VARIABLES_COLORS[dark]
+        self._vars.set_theme(bg, text)
 
     def set_name_visible(self, visible: bool) -> None:
         """Hide the name row when the form is docked (the dock header already

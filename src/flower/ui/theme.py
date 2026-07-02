@@ -75,6 +75,12 @@ def apply_theme(app: QApplication, theme: Theme) -> None:
     app.setPalette(_dark_palette() if theme is Theme.DARK else app.style().standardPalette())
 
 
+def is_dark(app: QApplication) -> bool:
+    """Whether the application currently renders with a dark background,
+    regardless of which Theme (Light/Dark/System) produced that palette."""
+    return app.palette().color(QPalette.ColorRole.Window).lightness() < 128
+
+
 def watch_system_theme(app: QApplication) -> None:
     """React live to window-manager theme changes while Theme.SYSTEM is selected."""
     def _on_system_scheme_changed(_scheme) -> None:
