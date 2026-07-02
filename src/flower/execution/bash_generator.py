@@ -23,9 +23,22 @@ def generate_bash_script(graph: Graph, flow_name: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _write_script(text: str, script_path: Path) -> None:
+    script_path.write_text(text, encoding="utf-8")
+    script_path.chmod(0o755)
+
+
 def write_bash_script(graph: Graph, flow_path: Path) -> None:
     """Generate the script for `graph` and write it next to `flow_path`
     (same file name, .sh extension), then make it executable."""
-    script_path = flow_path.with_suffix(".sh")
-    script_path.write_text(generate_bash_script(graph, flow_path.name), encoding="utf-8")
-    script_path.chmod(0o755)
+    _write_script(generate_bash_script(graph, flow_path.name), flow_path.with_suffix(".sh"))
+
+
+def write_timestamped_bash_script(graph: Graph, flow_path: Path, timestamp: str) -> Path:
+    """Same content as write_bash_script, written to <stem>_<timestamp>.sh
+    next to flow_path. Returns the path written, so the caller knows what
+    to execute. `timestamp` is injected by the caller (not computed here)
+    to keep this function deterministic and testable."""
+    script_path = flow_path.with_name(f"{flow_path.stem}_{timestamp}.sh")
+    _write_script(generate_bash_script(graph, flow_path.name), script_path)
+    return script_path

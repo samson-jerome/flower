@@ -4,7 +4,7 @@ from pathlib import Path
 from flower.models.graph import Graph
 from flower.models.node import Node, NodeType
 from flower.execution.traversal import traverse
-from flower.execution.bash_generator import generate_bash_script, write_bash_script
+from flower.execution.bash_generator import generate_bash_script, write_bash_script, write_timestamped_bash_script
 
 
 def _node(name, **kwargs) -> Node:
@@ -157,3 +157,37 @@ def test_write_bash_script_overwrites_existing_file(tmp_path):
     write_bash_script(Graph(), flow_path)
 
     assert "stale content" not in script_path.read_text(encoding="utf-8")
+
+
+def test_write_timestamped_bash_script_creates_file_with_timestamp_in_name(tmp_path):
+    flow_path = tmp_path / "demo.flow"
+    result_path = write_timestamped_bash_script(Graph(), flow_path, "20260702-143022")
+    expected_path = tmp_path / "demo_20260702-143022.sh"
+    assert result_path == expected_path
+    assert expected_path.exists()
+
+
+def test_write_timestamped_bash_script_content_matches_generate_bash_script(tmp_path):
+    flow_path = tmp_path / "demo.flow"
+    n = _node("build")
+    graph = Graph(roots=[n])
+    result_path = write_timestamped_bash_script(graph, flow_path, "20260702-143022")
+    content = result_path.read_text(encoding="utf-8")
+    assert content == generate_bash_script(graph, "demo.flow")
+
+
+def test_write_timestamped_bash_script_is_executable(tmp_path):
+    flow_path = tmp_path / "demo.flow"
+    result_path = write_timestamped_bash_script(Graph(), flow_path, "20260702-143022")
+    assert os.access(result_path, os.X_OK)
+
+
+def test_write_timestamped_bash_script_does_not_touch_static_script(tmp_path):
+    flow_path = tmp_path / "demo.flow"
+    write_bash_script(Graph(), flow_path)
+    static_content_before = (tmp_path / "demo.sh").read_text(encoding="utf-8")
+
+    write_timestamped_bash_script(Graph(), flow_path, "20260702-143022")
+
+    assert (tmp_path / "demo.sh").read_text(encoding="utf-8") == static_content_before
+    assert (tmp_path / "demo_20260702-143022.sh").exists()
