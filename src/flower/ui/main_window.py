@@ -16,7 +16,8 @@ from flower.ui.editor.editor_window import EditorWindow
 from flower.ui.preferences_dialog import PreferencesDialog
 from flower.io.xml_writer import write_flow
 from flower.io.xml_reader import read_flow
-from flower.execution.bash_generator import write_bash_script
+from flower.execution.bash_generator import write_bash_script, write_timestamped_bash_script
+from flower.execution.launcher import launch_in_terminal
 
 
 def _collect_names(graph: Graph) -> set[str]:
@@ -99,6 +100,7 @@ class MainWindow(QMainWindow):
 
         exec_menu = self.menuBar().addMenu("Exécution")
         exec_menu.addAction("Générer le script", self._generate_script)
+        exec_menu.addAction("Lance le script",   self._launch_script)
 
     def _open_preferences(self) -> None:
         PreferencesDialog(self).exec()
@@ -192,6 +194,16 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(
             f"Script généré : {self._path.with_suffix('.sh').name}", 3000
         )
+
+    def _launch_script(self) -> None:
+        if self._path is None:
+            self._save_as()
+            if self._path is None:  # user cancelled the save dialog
+                return
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        script_path = write_timestamped_bash_script(self._graph, self._path, timestamp)
+        launch_in_terminal(script_path)
+        self.statusBar().showMessage(f"Script lancé : {script_path.name}", 3000)
 
     # ── Node operations ─────────────────────────────────────────────────────
 
