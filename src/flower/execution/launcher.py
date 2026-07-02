@@ -4,9 +4,10 @@ from pathlib import Path
 from PySide6.QtCore import QProcess
 
 
-def launch_in_terminal(script_path: Path) -> None:
+def launch_in_terminal(script_path: Path) -> bool:
     """Open a new detached terminal window running script_path, then drop
     into an interactive shell so the output stays visible afterward.
+    Returns whether the terminal process was started successfully.
 
     Linux only: relies on x-terminal-emulator, the Debian/Ubuntu alternative
     for the system's configured default terminal. Per Debian Policy, every
@@ -15,4 +16,4 @@ def launch_in_terminal(script_path: Path) -> None:
     behavior does not depend on the target terminal's own quoting rules.
     """
     command = f"{shlex.quote(str(script_path))}; exec bash"
-    QProcess.startDetached("x-terminal-emulator", ["-e", "bash", "-c", command])
+    return QProcess.startDetached("x-terminal-emulator", ["-e", "bash", "-c", command])

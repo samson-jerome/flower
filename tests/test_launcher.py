@@ -12,12 +12,20 @@ def test_launch_in_terminal_calls_startDetached_with_expected_args(monkeypatch):
     )
     script_path = Path("/tmp/demo_20260702-143022.sh")
 
-    launch_in_terminal(script_path)
+    result = launch_in_terminal(script_path)
 
     assert len(calls) == 1
     program, args = calls[0]
     assert program == "x-terminal-emulator"
     assert args == ["-e", "bash", "-c", f"{shlex.quote(str(script_path))}; exec bash"]
+    assert result is True
+
+
+def test_launch_in_terminal_returns_false_on_failure(monkeypatch):
+    monkeypatch.setattr(QProcess, "startDetached", staticmethod(lambda program, args: False))
+    script_path = Path("/tmp/demo_20260702-143022.sh")
+
+    assert launch_in_terminal(script_path) is False
 
 
 def test_launch_in_terminal_quotes_path_with_spaces(monkeypatch):

@@ -100,7 +100,7 @@ class MainWindow(QMainWindow):
 
         exec_menu = self.menuBar().addMenu("Exécution")
         exec_menu.addAction("Générer le script", self._generate_script)
-        exec_menu.addAction("Lance le script",   self._launch_script)
+        exec_menu.addAction("Lancer le script",  self._launch_script)
 
     def _open_preferences(self) -> None:
         PreferencesDialog(self).exec()
@@ -202,8 +202,13 @@ class MainWindow(QMainWindow):
                 return
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         script_path = write_timestamped_bash_script(self._graph, self._path, timestamp)
-        launch_in_terminal(script_path)
-        self.statusBar().showMessage(f"Script lancé : {script_path.name}", 3000)
+        if launch_in_terminal(script_path):
+            self.statusBar().showMessage(f"Script lancé : {script_path.name}", 3000)
+        else:
+            QMessageBox.warning(
+                self, "Échec du lancement",
+                f"Impossible d'ouvrir un terminal pour exécuter {script_path.name}.",
+            )
 
     # ── Node operations ─────────────────────────────────────────────────────
 
