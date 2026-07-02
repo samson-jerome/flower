@@ -1,5 +1,5 @@
 from __future__ import annotations
-from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
+from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QApplication
 from PySide6.QtGui import QPainter, QKeyEvent, QFontMetrics, QFont, QPixmap, QColor, QPen, QBrush, QPainterPath
 from PySide6.QtCore import Qt, Signal, QPoint, QPointF, QRectF
 from flower.models.graph import Graph
@@ -7,6 +7,10 @@ from flower.models.node import Node, NodeType
 from flower.layout.tree_layout import compute_layout, NodePos, node_label
 from flower.ui.node_item import NodeItem, NodeItemSignals, NODE_HEIGHT, _TYPE_COLORS
 from flower.ui.edge_item import EdgeItem
+from flower.ui.theme import is_dark
+
+_CANVAS_BG_DARK  = "#1e1e1e"
+_CANVAS_BG_LIGHT = "#e3e3e3"
 
 
 def _deactivate_subtree(node: Node) -> None:
@@ -35,7 +39,7 @@ _GHOST_MAX_W       = 600
 _GHOST_MAX_H       = 400
 
 
-def _create_drag_pixmap_from_layout(drag_node: Node, items: dict) -> QPixmap:
+def _create_drag_pixmap_from_layout(drag_node: Node, items: dict, dark: bool) -> QPixmap:
     """Render the dragged subtree preserving its actual layout positions."""
 
     def collect_visible(node: Node, result: list) -> None:
@@ -135,7 +139,7 @@ def _create_drag_pixmap_from_layout(drag_node: Node, items: dict) -> QPixmap:
         painter.setPen(QPen(color, 1.5))
         painter.drawRoundedRect(QRectF(nx, ny, rw, NODE_HEIGHT), 6, 6)
 
-        painter.setPen(QPen(Qt.GlobalColor.white))
+        painter.setPen(QPen(Qt.GlobalColor.white if dark else QColor("#202020")))
         painter.drawText(
             QRectF(nx + 8, ny, rw - 16, NODE_HEIGHT),
             Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
@@ -160,7 +164,10 @@ class GraphCanvas(QGraphicsView):
         self.setDragMode(QGraphicsView.DragMode.NoDrag)
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
         self.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        self.setStyleSheet("background: #1e1e1e;")
+        self._apply_canvas_theme()
+        app = QApplication.instance()
+        if app is not None:
+            app.paletteChanged.connect(self._apply_canvas_theme)
 
         self._graph:              Graph | None        = None
         self._items:              dict[str, NodeItem] = {}
@@ -183,6 +190,11 @@ class GraphCanvas(QGraphicsView):
         self._signals.collapsed_toggled.connect(
             self._on_collapsed_toggled, Qt.ConnectionType.QueuedConnection
         )
+
+    def _apply_canvas_theme(self, *_args) -> None:
+        bg = _CANVAS_BG_DARK if is_dark(QApplication.instance()) else _CANVAS_BG_LIGHT
+        self.setStyleSheet(f"background: {bg};")
+        self._scene.update()
 
     # ── Public API ──────────────────────────────────────────────────────────
 
@@ -316,7 +328,9 @@ class GraphCanvas(QGraphicsView):
                 # Create the drag ghost.
                 drag_node = self._find_node(self._drag_node_id)
                 if drag_node is not None:
-                    pix = _create_drag_pixmap_from_layout(drag_node, self._items)
+                    pix = _create_drag_pixmap_from_layout(
+                        drag_node, self._items, is_dark(QApplication.instance())
+                    )
                     self._drag_ghost = QGraphicsPixmapItem(pix)
                     self._drag_ghost.setOpacity(0.82)
                     self._drag_ghost.setZValue(1000)

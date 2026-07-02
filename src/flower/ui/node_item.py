@@ -1,9 +1,10 @@
 from __future__ import annotations
-from PySide6.QtWidgets import QGraphicsItem, QStyleOptionGraphicsItem, QWidget
+from PySide6.QtWidgets import QGraphicsItem, QStyleOptionGraphicsItem, QWidget, QApplication
 from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QFont
 from PySide6.QtCore import Qt, QRectF, Signal, QObject
 from flower.models.node import Node, NodeType
 from flower.layout.tree_layout import NodePos, node_label
+from flower.ui.theme import is_dark
 
 NODE_HEIGHT = 32.0
 
@@ -58,6 +59,14 @@ class NodeItem(QGraphicsItem):
         self.update()
 
     def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget | None = None) -> None:
+        dark  = is_dark(QApplication.instance())
+        # Low-alpha node fills let the canvas show through, so the accent
+        # (label, selection border, button overlay) must flip with the
+        # canvas theme to stay readable — pure white on a light canvas
+        # would be invisible.
+        accent = Qt.GlobalColor.white if dark else QColor("#202020")
+        overlay_rgb = (255, 255, 255) if dark else (0, 0, 0)
+
         color  = _TYPE_COLORS.get(self._node.type, QColor("#808080"))
         rect   = self.boundingRect()
         radius = 6.0
@@ -65,7 +74,7 @@ class NodeItem(QGraphicsItem):
         bg = QColor(color)
         bg.setAlpha(60 if self._node.is_active else 30)
         painter.setBrush(QBrush(bg))
-        border_pen = QPen(Qt.GlobalColor.white if self._selected else color, 2)
+        border_pen = QPen(accent if self._selected else color, 2)
         painter.setPen(border_pen)
         painter.drawRoundedRect(rect, radius, radius)
 
@@ -87,7 +96,7 @@ class NodeItem(QGraphicsItem):
         btn_w = 28.0 if n > 0 else 0.0  # zone réservée au bouton (inclut marge droite)
 
         # Label
-        painter.setPen(QPen(Qt.GlobalColor.white))
+        painter.setPen(QPen(accent))
         painter.drawText(
             QRectF(20, 0, self._pos.width - 20 - btn_w, NODE_HEIGHT),
             Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
@@ -97,10 +106,10 @@ class NodeItem(QGraphicsItem):
         # Collapse / expand button (centré dans la zone, avec 8px de marge droite)
         if n > 0:
             btn_rect = QRectF(self._pos.width - 22.0, (NODE_HEIGHT - 14) / 2, 14, 14)
-            painter.setBrush(QBrush(QColor(255, 255, 255, 40)))
-            painter.setPen(QPen(QColor(255, 255, 255, 100), 1))
+            painter.setBrush(QBrush(QColor(*overlay_rgb, 40)))
+            painter.setPen(QPen(QColor(*overlay_rgb, 100), 1))
             painter.drawRoundedRect(btn_rect, 3, 3)
-            painter.setPen(QPen(Qt.GlobalColor.white))
+            painter.setPen(QPen(accent))
             painter.drawText(btn_rect, Qt.AlignmentFlag.AlignCenter,
                              "−" if not self._node.is_collapsed else "+")
 
