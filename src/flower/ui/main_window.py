@@ -100,7 +100,7 @@ class MainWindow(QMainWindow):
 
         exec_menu = self.menuBar().addMenu("Exécution")
         exec_menu.addAction("Générer le script", self._generate_script)
-        exec_menu.addAction("Lancer le script",  self._launch_script)
+        exec_menu.addAction("Lancer le script",  self._launch_script, "Alt+R")
 
     def _open_preferences(self) -> None:
         PreferencesDialog(self).exec()
