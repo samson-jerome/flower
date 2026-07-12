@@ -1,6 +1,7 @@
 from __future__ import annotations
 from pathlib import Path
 from flower.models.graph import Graph
+from flower.models.node import Variable, VariableOperation
 from flower.execution.traversal import traverse
 
 
@@ -10,16 +11,37 @@ def _shell_quote(value: str) -> str:
     return "'" + value.replace("'", "'\\''") + "'"
 
 
+def _declare_variable(var: Variable) -> str:
+    """Bash declaration line for one active variable, per its operation.
+    Any operation value other than CONCAT/ADD (including unrecognized
+    legacy values) is treated as ASSIGN."""
+    if var.operation == VariableOperation.CONCAT:
+        return f"{var.name}+={_shell_quote(var.value)}"
+    if var.operation == VariableOperation.ADD:
+        return f"{var.name}=$(({var.name} + {var.value}))"
+    return f"{var.name}={_shell_quote(var.value)}"
+
+
 def generate_bash_script(graph: Graph, flow_name: str) -> str:
     """Build the full script text for `graph`. `flow_name` is the display
     name of the .flow file (e.g. "demo.flow"), echoed once before any node.
     Pure function — no filesystem access.
     """
     lines = ["#!/bin/bash", "", f"echo Executing flow {_shell_quote(flow_name)}"]
+
+    active_global_vars = [v for v in graph.variables if v.active]
+    if active_global_vars:
+        lines.append("")
+        for v in active_global_vars:
+            lines.append(_declare_variable(v))
+
     for node in traverse(graph):
         lines.append("")
         lines.append(f"FL_NODE_NAME={_shell_quote(node.name)}")
         lines.append("echo Executing ${FL_NODE_NAME}")
+        for v in node.variables:
+            if v.active:
+                lines.append(_declare_variable(v))
     return "\n".join(lines) + "\n"
 
 

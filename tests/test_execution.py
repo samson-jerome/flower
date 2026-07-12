@@ -2,9 +2,11 @@ import uuid
 import os
 from pathlib import Path
 from flower.models.graph import Graph
-from flower.models.node import Node, NodeType
+from flower.models.node import Node, NodeType, Variable, VariableOperation
 from flower.execution.traversal import traverse
-from flower.execution.bash_generator import generate_bash_script, write_bash_script, write_timestamped_bash_script
+from flower.execution.bash_generator import (
+    generate_bash_script, write_bash_script, write_timestamped_bash_script, _declare_variable,
+)
 
 
 def _node(name, **kwargs) -> Node:
@@ -191,3 +193,95 @@ def test_write_timestamped_bash_script_does_not_touch_static_script(tmp_path):
 
     assert (tmp_path / "demo.sh").read_text(encoding="utf-8") == static_content_before
     assert (tmp_path / "demo_20260702-143022.sh").exists()
+
+
+def test_declare_variable_assign():
+    v = Variable(name="ENV", value="prod", operation=VariableOperation.ASSIGN)
+    assert _declare_variable(v) == "ENV='prod'"
+
+
+def test_declare_variable_concat():
+    v = Variable(name="MSG", value="world", operation=VariableOperation.CONCAT)
+    assert _declare_variable(v) == "MSG+='world'"
+
+
+def test_declare_variable_add():
+    v = Variable(name="COUNT", value="1", operation=VariableOperation.ADD)
+    assert _declare_variable(v) == "COUNT=$((COUNT + 1))"
+
+
+def test_declare_variable_unknown_operation_falls_back_to_assign():
+    v = Variable(name="ENV", value="prod", operation="unknown")
+    assert _declare_variable(v) == "ENV='prod'"
+
+
+def test_generate_bash_script_includes_active_global_variable():
+    graph = Graph(variables=[Variable(name="ENV", value="prod")])
+    script = generate_bash_script(graph, "demo.flow")
+    assert script == (
+        "#!/bin/bash\n"
+        "\n"
+        "echo Executing flow 'demo.flow'\n"
+        "\n"
+        "ENV='prod'\n"
+    )
+
+
+def test_generate_bash_script_excludes_inactive_global_variable():
+    graph = Graph(variables=[Variable(name="ENV", value="prod", active=False)])
+    script = generate_bash_script(graph, "demo.flow")
+    assert script == (
+        "#!/bin/bash\n"
+        "\n"
+        "echo Executing flow 'demo.flow'\n"
+    )
+
+
+def test_generate_bash_script_includes_active_local_variable():
+    n = _node("build", variables=[Variable(name="TARGET", value="release")])
+    graph = Graph(roots=[n])
+    script = generate_bash_script(graph, "demo.flow")
+    assert script == (
+        "#!/bin/bash\n"
+        "\n"
+        "echo Executing flow 'demo.flow'\n"
+        "\n"
+        "FL_NODE_NAME='build'\n"
+        "echo Executing ${FL_NODE_NAME}\n"
+        "TARGET='release'\n"
+    )
+
+
+def test_generate_bash_script_excludes_inactive_local_variable():
+    n = _node("build", variables=[Variable(name="TARGET", value="release", active=False)])
+    graph = Graph(roots=[n])
+    script = generate_bash_script(graph, "demo.flow")
+    assert "TARGET" not in script
+
+
+def test_generate_bash_script_global_and_local_variables_combined():
+    n = _node("build", variables=[Variable(name="TARGET", value="release")])
+    graph = Graph(roots=[n], variables=[Variable(name="ENV", value="prod")])
+    script = generate_bash_script(graph, "demo.flow")
+    assert script == (
+        "#!/bin/bash\n"
+        "\n"
+        "echo Executing flow 'demo.flow'\n"
+        "\n"
+        "ENV='prod'\n"
+        "\n"
+        "FL_NODE_NAME='build'\n"
+        "echo Executing ${FL_NODE_NAME}\n"
+        "TARGET='release'\n"
+    )
+
+
+def test_generate_bash_script_concat_and_add_operations():
+    n = _node("build", variables=[
+        Variable(name="MSG", value="world", operation=VariableOperation.CONCAT),
+        Variable(name="COUNT", value="1", operation=VariableOperation.ADD),
+    ])
+    graph = Graph(roots=[n])
+    script = generate_bash_script(graph, "demo.flow")
+    assert "MSG+='world'\n" in script
+    assert "COUNT=$((COUNT + 1))\n" in script
