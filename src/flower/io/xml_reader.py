@@ -2,7 +2,7 @@ from __future__ import annotations
 import uuid
 from pathlib import Path
 from lxml import etree
-from flower.models.node import Node, NodeType, Variable
+from flower.models.node import Node, NodeType, Variable, VariableOperation
 from flower.models.graph import Graph
 
 
@@ -16,7 +16,7 @@ def _read_vars(el) -> list[Variable]:
             value=v.get("value", ""),
             description=v.get("description", ""),
             active=v.get("active", "1") == "1",
-            operation=v.get("operation", "="),
+            operation=v.get("operation", VariableOperation.ASSIGN),
         )
         for v in vars_el.findall("var")
     ]

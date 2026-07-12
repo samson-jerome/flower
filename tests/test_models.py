@@ -1,4 +1,4 @@
-from flower.models.node import Variable, NodeType, Node
+from flower.models.node import Variable, VariableOperation, NodeType, Node
 from flower.models.graph import Graph
 
 
@@ -6,7 +6,13 @@ def test_variable_defaults():
     v = Variable(name="FOO", value="bar")
     assert v.description == ""
     assert v.active is True
-    assert v.operation == "="
+    assert v.operation == VariableOperation.ASSIGN
+
+
+def test_variable_operation_enum_values():
+    assert VariableOperation.ASSIGN == "assign"
+    assert VariableOperation.CONCAT == "concat"
+    assert VariableOperation.ADD == "add"
 
 
 def test_node_type_values():

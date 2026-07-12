@@ -11,13 +11,19 @@ class NodeType(StrEnum):
     LOOP   = "loop"
 
 
+class VariableOperation(StrEnum):
+    ASSIGN = "assign"
+    CONCAT = "concat"
+    ADD    = "add"
+
+
 @dataclass
 class Variable:
     name:        str
     value:       str
     description: str  = ""
     active:      bool = True
-    operation:   str  = "="
+    operation:   str  = VariableOperation.ASSIGN
 
 
 @dataclass
