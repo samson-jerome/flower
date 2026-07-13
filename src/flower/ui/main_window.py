@@ -3,7 +3,7 @@ import uuid
 from pathlib import Path
 from datetime import datetime, timezone
 from PySide6.QtWidgets import (
-    QMainWindow, QSplitter, QMessageBox, QFileDialog, QLabel,
+    QMainWindow, QSplitter, QMessageBox, QFileDialog, QLabel, QApplication,
 )
 from PySide6.QtCore import Qt, QSettings
 from flower.models.graph import Graph
@@ -15,10 +15,23 @@ from flower.ui.notes_panel import NotesPanel, bind_notes_to_splitter
 from flower.ui.vars_panel import VarsPanel
 from flower.ui.editor.editor_window import EditorWindow
 from flower.ui.preferences_dialog import PreferencesDialog
+from flower.ui.theme import is_dark
 from flower.io.xml_writer import write_flow
 from flower.io.xml_reader import read_flow
 from flower.execution.bash_generator import write_bash_script, write_timestamped_bash_script
 from flower.execution.launcher import launch_in_terminal
+
+# (background, text) pairs, keyed by whether the app is currently dark.
+# Same palette as flower.ui.editor.node_form, for visual consistency between
+# the main window's global panels and the node dialog's local ones.
+_DESCRIPTION_COLORS = {
+    True:  ("#898989", "#F0F0F0"),   # gris souris
+    False: ("#D8D8D8", "#2B2B2B"),   # gris souris clair
+}
+_VARIABLES_COLORS = {
+    True:  ("#2E5F66", "#F0F0F0"),   # bleu pétrole
+    False: ("#CFE6E9", "#1B3A40"),   # bleu pétrole clair
+}
 
 
 def _collect_names(graph: Graph) -> set[str]:
@@ -59,6 +72,11 @@ class MainWindow(QMainWindow):
         self._notes.text_changed.connect(self._on_notes_changed)
         self._global_vars = VarsPanel(title="Variables globales")
         self._global_vars.variables_changed.connect(self._on_global_vars_changed)
+
+        self._apply_theme_colors()
+        app = QApplication.instance()
+        if app is not None:
+            app.paletteChanged.connect(self._apply_theme_colors)
 
         self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, self._toolbar)
 
@@ -361,6 +379,13 @@ class MainWindow(QMainWindow):
     def _on_global_vars_changed(self) -> None:
         self._graph.variables = self._global_vars.get_variables()
         self.mark_dirty()
+
+    def _apply_theme_colors(self, *_args) -> None:
+        dark = is_dark(QApplication.instance())
+        bg, text = _DESCRIPTION_COLORS[dark]
+        self._notes.set_theme(bg, text)
+        bg, text = _VARIABLES_COLORS[dark]
+        self._global_vars.set_theme(bg, text)
 
     # ── Helpers ──────────────────────────────────────────────────────────────
 
