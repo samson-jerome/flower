@@ -3,7 +3,10 @@ from PySide6.QtCore import QSettings
 from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import QDialog, QPushButton
 from flower.ui import theme as theme_mod
+from flower.ui import interpreters as interpreters_mod
 from flower.ui.theme import Theme, load_theme, save_theme
+from flower.ui.interpreters import load_interpreters, save_interpreter
+from flower.execution.bash_generator import DEFAULT_INTERPRETERS
 from flower.ui.preferences_dialog import PreferencesDialog
 
 
@@ -15,10 +18,9 @@ def pristine_style_and_palette(qapp):
 @pytest.fixture(autouse=True)
 def isolated_settings(tmp_path, monkeypatch):
     ini_path = str(tmp_path / "settings.ini")
-    monkeypatch.setattr(
-        theme_mod, "QSettings",
-        lambda: QSettings(ini_path, QSettings.Format.IniFormat),
-    )
+    settings_factory = lambda: QSettings(ini_path, QSettings.Format.IniFormat)
+    monkeypatch.setattr(theme_mod, "QSettings", settings_factory)
+    monkeypatch.setattr(interpreters_mod, "QSettings", settings_factory)
 
 
 @pytest.fixture(autouse=True)
@@ -53,3 +55,17 @@ def test_close_button_accepts_dialog(qapp):
     close_btn = dialog.findChild(QPushButton)
     close_btn.click()
     assert finished == [QDialog.DialogCode.Accepted]
+
+
+def test_dialog_preselects_current_interpreters(qapp):
+    save_interpreter("python", "/usr/bin/python3.11")
+    dialog = PreferencesDialog()
+    assert dialog._interp_edits["python"].text() == "/usr/bin/python3.11"
+    assert dialog._interp_edits["sh"].text() == DEFAULT_INTERPRETERS["sh"]
+
+
+def test_editing_interpreter_field_saves_on_editing_finished(qapp):
+    dialog = PreferencesDialog()
+    dialog._interp_edits["javascript"].setText("nodejs")
+    dialog._interp_edits["javascript"].editingFinished.emit()
+    assert load_interpreters()["javascript"] == "nodejs"
