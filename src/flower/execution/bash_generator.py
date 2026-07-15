@@ -12,14 +12,18 @@ def _shell_quote(value: str) -> str:
 
 
 def _declare_variable(var: Variable) -> str:
-    """Bash declaration line for one active variable, per its operation.
-    Any operation value other than CONCAT/ADD (including unrecognized
-    legacy values) is treated as ASSIGN."""
+    """Bash declaration line for one active variable, per its operation,
+    followed by an export line so the variable is visible in the
+    environment of any external interpreter invoked via heredoc (see
+    _script_body_lines). Any operation value other than CONCAT/ADD
+    (including unrecognized legacy values) is treated as ASSIGN."""
     if var.operation == VariableOperation.CONCAT:
-        return f"{var.name}+={_shell_quote(var.value)}"
-    if var.operation == VariableOperation.ADD:
-        return f"{var.name}=$(({var.name} + {var.value}))"
-    return f"{var.name}={_shell_quote(var.value)}"
+        assignment = f"{var.name}+={_shell_quote(var.value)}"
+    elif var.operation == VariableOperation.ADD:
+        assignment = f"{var.name}=$(({var.name} + {var.value}))"
+    else:
+        assignment = f"{var.name}={_shell_quote(var.value)}"
+    return f"{assignment}\nexport {var.name}"
 
 
 DEFAULT_INTERPRETERS: dict[str, str] = {
