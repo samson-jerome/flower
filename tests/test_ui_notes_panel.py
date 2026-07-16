@@ -122,3 +122,15 @@ def test_notes_panel_header_is_checkable_button(qapp):
     p = NotesPanel()
     assert isinstance(p._toggle, QPushButton)
     assert p._toggle.isCheckable() is True
+
+
+def test_notes_panel_theme_retints_icon(qapp):
+    p = NotesPanel()
+
+    p.set_theme("#222222", "#ff0000")
+    red_icon_key = p._toggle.icon().cacheKey()
+
+    p.set_theme("#222222", "#00ff00")
+    green_icon_key = p._toggle.icon().cacheKey()
+
+    assert red_icon_key != green_icon_key

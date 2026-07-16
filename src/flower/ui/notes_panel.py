@@ -92,13 +92,15 @@ class CollapsibleSection(QWidget):
 
     def set_theme(self, background: str, text: str | None = None) -> None:
         """Apply a background color to the section (and optionally a text
-        color for the header checkbox)."""
+        color for the header button, also used to tint its icon)."""
         name = f"section_{id(self)}"
         self.setObjectName(name)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         style = f"#{name} {{ background-color: {background}; }}"
         if text:
-            style += f" #{name} QCheckBox {{ color: {text}; }}"
+            style += f" #{name} QPushButton {{ color: {text}; }}"
+            self._current_text_color = text
+            self._update_icon()
         self.setStyleSheet(style)
 
     # ── Internals ────────────────────────────────────────────────────────────
