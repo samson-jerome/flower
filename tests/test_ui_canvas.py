@@ -38,3 +38,50 @@ def test_canvas_find_node_recursive(qapp):
     canvas = GraphCanvas()
     canvas.load_graph(Graph(roots=[root]))
     assert canvas._find_node(child.id) is child
+
+
+from PySide6.QtCore import QPointF
+
+
+def test_drop_refused_when_target_if_node_already_has_two_children(qapp):
+    target  = _node("check", NodeType.IF)
+    child_a = _node("true_branch")
+    child_b = _node("false_branch")
+    target.children = [child_a, child_b]
+    child_a.parent = target
+    child_b.parent = target
+    drag = _node("extra")
+
+    canvas = GraphCanvas()
+    canvas.load_graph(Graph(roots=[target, drag]))
+    canvas._drag_node_id = drag.id
+
+    received = []
+    canvas.drop_rejected.connect(received.append)
+    target_pos = canvas._items[target.id].sceneBoundingRect().center()
+    canvas._perform_drop(target_pos)
+
+    assert target.children == [child_a, child_b]
+    assert drag not in target.children
+    assert drag in canvas._graph.roots
+    assert received
+
+
+def test_drop_allowed_when_target_if_node_has_one_child(qapp):
+    target  = _node("check", NodeType.IF)
+    child_a = _node("true_branch")
+    target.children = [child_a]
+    child_a.parent = target
+    drag = _node("extra")
+
+    canvas = GraphCanvas()
+    canvas.load_graph(Graph(roots=[target, drag]))
+    canvas._drag_node_id = drag.id
+
+    received = []
+    canvas.drop_rejected.connect(received.append)
+    target_pos = canvas._items[target.id].sceneBoundingRect().center()
+    canvas._perform_drop(target_pos)
+
+    assert drag in target.children
+    assert not received

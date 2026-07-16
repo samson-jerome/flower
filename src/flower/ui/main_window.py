@@ -137,6 +137,7 @@ class MainWindow(QMainWindow):
         self._canvas.add_child_requested.connect(self._add_child_node)
         self._canvas.delete_requested.connect(self._delete_selected_node)
         self._canvas.node_active_changed.connect(self.mark_dirty)
+        self._canvas.drop_rejected.connect(lambda msg: self.statusBar().showMessage(msg, 3000))
         self._toolbar.add_node_requested.connect(self._add_child_node)
         self._toolbar.delete_node_requested.connect(self._delete_selected_node)
         self._toolbar.refresh_requested.connect(self._canvas.refresh_layout)

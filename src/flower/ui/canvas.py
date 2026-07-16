@@ -3,7 +3,7 @@ from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
 from PySide6.QtGui import QPainter, QKeyEvent, QFontMetrics, QFont, QPixmap, QColor, QPen, QBrush, QPainterPath
 from PySide6.QtCore import Qt, Signal, QPoint, QPointF, QRectF
 from flower.models.graph import Graph
-from flower.models.node import Node, NodeType
+from flower.models.node import Node, NodeType, MAX_CHILDREN
 from flower.layout.tree_layout import compute_layout, NodePos, node_label
 from flower.ui.node_item import NodeItem, NodeItemSignals, NODE_HEIGHT, _TYPE_COLORS
 from flower.ui.edge_item import EdgeItem
@@ -156,6 +156,7 @@ class GraphCanvas(QGraphicsView):
     add_child_requested = Signal()
     delete_requested    = Signal()
     node_active_changed = Signal()     # graph mutated, mark dirty
+    drop_rejected       = Signal(str)  # message for the status bar
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -412,6 +413,16 @@ class GraphCanvas(QGraphicsView):
             or self._is_ancestor_of(drag_node.id, target_node)
         ):
             return
+
+        # Refuse if it would exceed the target type's max-children constraint.
+        if target_node is not None:
+            max_children = MAX_CHILDREN.get(target_node.type)
+            if max_children is not None and len(target_node.children) >= max_children:
+                self.drop_rejected.emit(
+                    f"Un nœud « {target_node.type.value} » ne peut avoir plus de "
+                    f"{max_children} enfant(s)."
+                )
+                return
 
         # Detach from current parent.
         if drag_node.parent:
