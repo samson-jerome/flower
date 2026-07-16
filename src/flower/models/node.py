@@ -11,6 +11,11 @@ class NodeType(StrEnum):
     LOOP   = "loop"
 
 
+MAX_CHILDREN: dict[NodeType, int] = {
+    NodeType.IF: 2,
+}
+
+
 class VariableOperation(StrEnum):
     ASSIGN = "assign"
     CONCAT = "concat"

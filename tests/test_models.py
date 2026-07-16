@@ -46,3 +46,16 @@ def test_graph_defaults():
     assert g.variables == []
     assert g.created_at == ""
     assert g.updated_at == ""
+
+
+def test_max_children_limits_if_nodes_to_two():
+    from flower.models.node import MAX_CHILDREN
+    assert MAX_CHILDREN[NodeType.IF] == 2
+
+
+def test_max_children_has_no_limit_for_other_types():
+    from flower.models.node import MAX_CHILDREN
+    assert MAX_CHILDREN.get(NodeType.NOOP) is None
+    assert MAX_CHILDREN.get(NodeType.SCRIPT) is None
+    assert MAX_CHILDREN.get(NodeType.DATA) is None
+    assert MAX_CHILDREN.get(NodeType.LOOP) is None
