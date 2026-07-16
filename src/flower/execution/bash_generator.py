@@ -2,7 +2,6 @@ from __future__ import annotations
 from pathlib import Path
 from flower.models.graph import Graph
 from flower.models.node import Node, NodeType, Variable, VariableOperation
-from flower.execution.traversal import traverse
 
 
 def _shell_quote(value: str) -> str:
@@ -34,11 +33,15 @@ DEFAULT_INTERPRETERS: dict[str, str] = {
 }
 
 
-def _script_body_lines(node: Node, interpreters: dict[str, str]) -> list[str]:
+def _script_body_lines(node: Node, interpreters: dict[str, str], pad: str = "") -> list[str]:
     """Lines to append after a node's block for its NodeType.SCRIPT body.
     Empty list if the node isn't a script node or has no body. bash (absent
     from `interpreters`) and any unrecognized/legacy language value fall
-    back to inserting the body inline, with no heredoc."""
+    back to inserting the body inline, with no heredoc. `pad` is applied
+    only to the heredoc's opening command line -- never to `body` or the
+    closing `delimiter` line, since indenting either could corrupt
+    whitespace-significant body content or break the heredoc's terminator
+    recognition (which requires column 0)."""
     if node.type != NodeType.SCRIPT:
         return []
     body = node.type_data.get("body", "").rstrip("\n")
@@ -48,7 +51,54 @@ def _script_body_lines(node: Node, interpreters: dict[str, str]) -> list[str]:
     if command is None:
         return [body]
     delimiter = f"FL_SCRIPT_{node.id}"
-    return [f"{command} <<'{delimiter}'", body, delimiter]
+    return [f"{pad}{command} <<'{delimiter}'", body, delimiter]
+
+
+def _generate_node(
+    node: Node, interpreters: dict[str, str], indent: int = 0, leading_blank: bool = True,
+) -> list[str]:
+    """Lines for `node` and its subtree. Empty list if `node.is_active` is
+    False (its whole subtree is skipped, matching traverse()'s former
+    semantics). `indent` is the nesting depth in 4-space units, incremented
+    only when descending into an IF node's then/else block -- plain
+    parent/child sequencing (non-IF) stays at the same depth, matching the
+    flat, unindented output this replaces. `leading_blank` adds the blank
+    separator line used between flat sibling blocks; it is False for the
+    first node of a then/else branch, since the if/else line itself already
+    marks the start of that block. Only ever reads children[0]/children[1]
+    for an IF node -- any child beyond index 1 is silently ignored (the UI
+    prevents an IF node from having more than 2 children in the first
+    place; see MAX_CHILDREN in models/node.py)."""
+    if not node.is_active:
+        return []
+    pad = "    " * indent
+    lines = [""] if leading_blank else []
+    lines.append(f"{pad}FL_NODE_NAME={_shell_quote(node.name)}")
+    lines.append(f"{pad}echo Executing ${{FL_NODE_NAME}}")
+    for v in node.variables:
+        if v.active:
+            lines.append("\n".join(pad + line for line in _declare_variable(v).split("\n")))
+
+    if node.type == NodeType.IF:
+        condition = node.type_data.get("condition", "")
+        lines.append(f"{pad}if [ {condition} ]; then")
+        true_lines = (
+            _generate_node(node.children[0], interpreters, indent + 1, leading_blank=False)
+            if node.children else []
+        )
+        lines.extend(true_lines if true_lines else [f"{pad}    :"])
+        if len(node.children) > 1:
+            false_lines = _generate_node(
+                node.children[1], interpreters, indent + 1, leading_blank=False,
+            )
+            lines.append(f"{pad}else")
+            lines.extend(false_lines if false_lines else [f"{pad}    :"])
+        lines.append(f"{pad}fi")
+    else:
+        lines.extend(_script_body_lines(node, interpreters, pad))
+        for child in node.children:
+            lines.extend(_generate_node(child, interpreters, indent))
+    return lines
 
 
 def generate_bash_script(
@@ -69,14 +119,8 @@ def generate_bash_script(
         for v in active_global_vars:
             lines.append(_declare_variable(v))
 
-    for node in traverse(graph):
-        lines.append("")
-        lines.append(f"FL_NODE_NAME={_shell_quote(node.name)}")
-        lines.append("echo Executing ${FL_NODE_NAME}")
-        for v in node.variables:
-            if v.active:
-                lines.append(_declare_variable(v))
-        lines.extend(_script_body_lines(node, interpreters))
+    for root in graph.roots:
+        lines.extend(_generate_node(root, interpreters))
     return "\n".join(lines) + "\n"
 
 

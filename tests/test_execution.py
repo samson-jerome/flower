@@ -21,6 +21,13 @@ def _script_node(name, language, body, node_id=None, **kwargs) -> Node:
     )
 
 
+def _if_node(name, condition, node_id=None, **kwargs) -> Node:
+    return Node(
+        id=node_id or str(uuid.uuid4()), name=name, type=NodeType.IF,
+        type_data={"condition": condition}, **kwargs
+    )
+
+
 def test_traverse_empty_graph_yields_nothing():
     assert list(traverse(Graph())) == []
 
@@ -395,5 +402,228 @@ def test_generate_bash_script_empty_script_body_adds_nothing():
         "echo Executing flow 'demo.flow'\n"
         "\n"
         "FL_NODE_NAME='build'\n"
+        "echo Executing ${FL_NODE_NAME}\n"
+    )
+
+
+def test_generate_bash_script_if_node_true_and_false_branches():
+    true_child  = _node("deploy")
+    false_child = _node("rollback")
+    if_node = _if_node("check", '"$TARGET" = "release"', children=[true_child, false_child])
+    true_child.parent = if_node
+    false_child.parent = if_node
+    graph = Graph(roots=[if_node])
+    script = generate_bash_script(graph, "demo.flow")
+    assert script == (
+        "#!/bin/bash\n"
+        "\n"
+        "echo Executing flow 'demo.flow'\n"
+        "\n"
+        "FL_NODE_NAME='check'\n"
+        "echo Executing ${FL_NODE_NAME}\n"
+        "if [ \"$TARGET\" = \"release\" ]; then\n"
+        "    FL_NODE_NAME='deploy'\n"
+        "    echo Executing ${FL_NODE_NAME}\n"
+        "else\n"
+        "    FL_NODE_NAME='rollback'\n"
+        "    echo Executing ${FL_NODE_NAME}\n"
+        "fi\n"
+    )
+
+
+def test_generate_bash_script_if_node_true_branch_only():
+    true_child = _node("deploy")
+    if_node = _if_node("check", "-f /tmp/flag", children=[true_child])
+    true_child.parent = if_node
+    graph = Graph(roots=[if_node])
+    script = generate_bash_script(graph, "demo.flow")
+    assert script == (
+        "#!/bin/bash\n"
+        "\n"
+        "echo Executing flow 'demo.flow'\n"
+        "\n"
+        "FL_NODE_NAME='check'\n"
+        "echo Executing ${FL_NODE_NAME}\n"
+        "if [ -f /tmp/flag ]; then\n"
+        "    FL_NODE_NAME='deploy'\n"
+        "    echo Executing ${FL_NODE_NAME}\n"
+        "fi\n"
+    )
+
+
+def test_generate_bash_script_if_node_no_children():
+    if_node = _if_node("check", "-f /tmp/flag")
+    graph = Graph(roots=[if_node])
+    script = generate_bash_script(graph, "demo.flow")
+    assert script == (
+        "#!/bin/bash\n"
+        "\n"
+        "echo Executing flow 'demo.flow'\n"
+        "\n"
+        "FL_NODE_NAME='check'\n"
+        "echo Executing ${FL_NODE_NAME}\n"
+        "if [ -f /tmp/flag ]; then\n"
+        "    :\n"
+        "fi\n"
+    )
+
+
+def test_generate_bash_script_if_node_inactive_true_child_treated_as_absent():
+    true_child = _node("deploy", is_active=False)
+    if_node = _if_node("check", "-f /tmp/flag", children=[true_child])
+    true_child.parent = if_node
+    graph = Graph(roots=[if_node])
+    script = generate_bash_script(graph, "demo.flow")
+    assert script == (
+        "#!/bin/bash\n"
+        "\n"
+        "echo Executing flow 'demo.flow'\n"
+        "\n"
+        "FL_NODE_NAME='check'\n"
+        "echo Executing ${FL_NODE_NAME}\n"
+        "if [ -f /tmp/flag ]; then\n"
+        "    :\n"
+        "fi\n"
+    )
+
+
+def test_generate_bash_script_if_node_empty_condition():
+    if_node = _if_node("check", "")
+    graph = Graph(roots=[if_node])
+    script = generate_bash_script(graph, "demo.flow")
+    assert script == (
+        "#!/bin/bash\n"
+        "\n"
+        "echo Executing flow 'demo.flow'\n"
+        "\n"
+        "FL_NODE_NAME='check'\n"
+        "echo Executing ${FL_NODE_NAME}\n"
+        "if [  ]; then\n"
+        "    :\n"
+        "fi\n"
+    )
+
+
+def test_generate_bash_script_if_node_variables_declared_before_condition():
+    if_node = _if_node(
+        "check", '"$TARGET" = "release"',
+        variables=[Variable(name="TARGET", value="release")],
+    )
+    graph = Graph(roots=[if_node])
+    script = generate_bash_script(graph, "demo.flow")
+    assert script == (
+        "#!/bin/bash\n"
+        "\n"
+        "echo Executing flow 'demo.flow'\n"
+        "\n"
+        "FL_NODE_NAME='check'\n"
+        "echo Executing ${FL_NODE_NAME}\n"
+        "TARGET='release'\n"
+        "export TARGET\n"
+        "if [ \"$TARGET\" = \"release\" ]; then\n"
+        "    :\n"
+        "fi\n"
+    )
+
+
+def test_generate_bash_script_nested_if_doubles_indentation():
+    leaf  = _node("leaf")
+    inner = _if_node("inner", "-f /tmp/b", children=[leaf])
+    leaf.parent = inner
+    outer = _if_node("outer", "-f /tmp/a", children=[inner])
+    inner.parent = outer
+    graph = Graph(roots=[outer])
+    script = generate_bash_script(graph, "demo.flow")
+    assert script == (
+        "#!/bin/bash\n"
+        "\n"
+        "echo Executing flow 'demo.flow'\n"
+        "\n"
+        "FL_NODE_NAME='outer'\n"
+        "echo Executing ${FL_NODE_NAME}\n"
+        "if [ -f /tmp/a ]; then\n"
+        "    FL_NODE_NAME='inner'\n"
+        "    echo Executing ${FL_NODE_NAME}\n"
+        "    if [ -f /tmp/b ]; then\n"
+        "        FL_NODE_NAME='leaf'\n"
+        "        echo Executing ${FL_NODE_NAME}\n"
+        "    fi\n"
+        "fi\n"
+    )
+
+
+def test_generate_bash_script_inline_script_body_not_indented_inside_branch():
+    script_child = _script_node("build", "bash", "echo hi")
+    if_node = _if_node("check", "-f /tmp/flag", children=[script_child])
+    script_child.parent = if_node
+    graph = Graph(roots=[if_node])
+    script = generate_bash_script(graph, "demo.flow")
+    assert script == (
+        "#!/bin/bash\n"
+        "\n"
+        "echo Executing flow 'demo.flow'\n"
+        "\n"
+        "FL_NODE_NAME='check'\n"
+        "echo Executing ${FL_NODE_NAME}\n"
+        "if [ -f /tmp/flag ]; then\n"
+        "    FL_NODE_NAME='build'\n"
+        "    echo Executing ${FL_NODE_NAME}\n"
+        "echo hi\n"
+        "fi\n"
+    )
+
+
+def test_generate_bash_script_heredoc_command_indented_but_body_and_delimiter_not():
+    script_child = _script_node("build", "python", "print('hi')", node_id="abc123")
+    if_node = _if_node("check", "-f /tmp/flag", children=[script_child])
+    script_child.parent = if_node
+    graph = Graph(roots=[if_node])
+    script = generate_bash_script(graph, "demo.flow")
+    assert script == (
+        "#!/bin/bash\n"
+        "\n"
+        "echo Executing flow 'demo.flow'\n"
+        "\n"
+        "FL_NODE_NAME='check'\n"
+        "echo Executing ${FL_NODE_NAME}\n"
+        "if [ -f /tmp/flag ]; then\n"
+        "    FL_NODE_NAME='build'\n"
+        "    echo Executing ${FL_NODE_NAME}\n"
+        "    python3 <<'FL_SCRIPT_abc123'\n"
+        "print('hi')\n"
+        "FL_SCRIPT_abc123\n"
+        "fi\n"
+    )
+
+
+def test_generate_bash_script_no_regression_without_if_nodes():
+    # Same tree shape as test_traverse_preorder_parent_then_children_then_sibling.
+    root       = _node("root")
+    child_a    = _node("child_a")
+    grandchild = _node("grandchild")
+    child_b    = _node("child_b")
+    child_a.children = [grandchild]
+    grandchild.parent = child_a
+    root.children = [child_a, child_b]
+    child_a.parent = root
+    child_b.parent = root
+    graph = Graph(roots=[root])
+
+    script = generate_bash_script(graph, "demo.flow")
+    assert script == (
+        "#!/bin/bash\n"
+        "\n"
+        "echo Executing flow 'demo.flow'\n"
+        "\n"
+        "FL_NODE_NAME='root'\n"
+        "echo Executing ${FL_NODE_NAME}\n"
+        "\n"
+        "FL_NODE_NAME='child_a'\n"
+        "echo Executing ${FL_NODE_NAME}\n"
+        "\n"
+        "FL_NODE_NAME='grandchild'\n"
+        "echo Executing ${FL_NODE_NAME}\n"
+        "\n"
+        "FL_NODE_NAME='child_b'\n"
         "echo Executing ${FL_NODE_NAME}\n"
     )
