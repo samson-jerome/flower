@@ -487,6 +487,28 @@ def test_generate_bash_script_if_node_inactive_true_child_treated_as_absent():
     )
 
 
+def test_generate_bash_script_if_node_inactive_false_child_treated_as_absent():
+    true_child  = _node("deploy")
+    false_child = _node("rollback", is_active=False)
+    if_node = _if_node("check", "-f /tmp/flag", children=[true_child, false_child])
+    true_child.parent = if_node
+    false_child.parent = if_node
+    graph = Graph(roots=[if_node])
+    script = generate_bash_script(graph, "demo.flow")
+    assert script == (
+        "#!/bin/bash\n"
+        "\n"
+        "echo Executing flow 'demo.flow'\n"
+        "\n"
+        "FL_NODE_NAME='check'\n"
+        "echo Executing ${FL_NODE_NAME}\n"
+        "if [ -f /tmp/flag ]; then\n"
+        "    FL_NODE_NAME='deploy'\n"
+        "    echo Executing ${FL_NODE_NAME}\n"
+        "fi\n"
+    )
+
+
 def test_generate_bash_script_if_node_empty_condition():
     if_node = _if_node("check", "")
     graph = Graph(roots=[if_node])

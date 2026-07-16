@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QSettings
 from flower.models.graph import Graph
-from flower.models.node import Node, NodeType
+from flower.models.node import Node, NodeType, MAX_CHILDREN
 from flower.ui.canvas import GraphCanvas
 from flower.ui.toolbar import ToolBar
 from flower.ui.dock_panel import DockPanel
@@ -244,15 +244,21 @@ class MainWindow(QMainWindow):
     # ── Node operations ─────────────────────────────────────────────────────
 
     def _add_child_node(self) -> None:
-        new_node = Node(id=str(uuid.uuid4()), name=_unique_name("nouveau", self._graph), type=NodeType.NOOP)
         parent_id = self._canvas._selected_id
-        if parent_id:
-            parent = self._canvas._find_node(parent_id)
-            if parent:
-                new_node.parent = parent
-                parent.children.append(new_node)
-            else:
-                self._graph.roots.append(new_node)
+        parent = self._canvas._find_node(parent_id) if parent_id else None
+        if parent is not None:
+            max_children = MAX_CHILDREN.get(parent.type)
+            if max_children is not None and len(parent.children) >= max_children:
+                self.statusBar().showMessage(
+                    f"Un nœud « {parent.type.value} » ne peut avoir plus de "
+                    f"{max_children} enfant(s).",
+                    3000,
+                )
+                return
+        new_node = Node(id=str(uuid.uuid4()), name=_unique_name("nouveau", self._graph), type=NodeType.NOOP)
+        if parent is not None:
+            new_node.parent = parent
+            parent.children.append(new_node)
         else:
             self._graph.roots.append(new_node)
         self.mark_dirty()

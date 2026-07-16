@@ -87,12 +87,13 @@ def _generate_node(
             if node.children else []
         )
         lines.extend(true_lines if true_lines else [f"{pad}    :"])
-        if len(node.children) > 1:
-            false_lines = _generate_node(
-                node.children[1], interpreters, indent + 1, leading_blank=False,
-            )
+        false_lines = (
+            _generate_node(node.children[1], interpreters, indent + 1, leading_blank=False)
+            if len(node.children) > 1 else []
+        )
+        if false_lines:
             lines.append(f"{pad}else")
-            lines.extend(false_lines if false_lines else [f"{pad}    :"])
+            lines.extend(false_lines)
         lines.append(f"{pad}fi")
     else:
         lines.extend(_script_body_lines(node, interpreters, pad))
