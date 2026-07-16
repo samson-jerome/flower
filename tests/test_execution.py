@@ -5,12 +5,20 @@ from flower.models.graph import Graph
 from flower.models.node import Node, NodeType, Variable, VariableOperation
 from flower.execution.traversal import traverse
 from flower.execution.bash_generator import (
-    generate_bash_script, write_bash_script, write_timestamped_bash_script, _declare_variable,
+    generate_bash_script, write_bash_script, write_timestamped_bash_script,
+    _declare_variable, _script_body_lines, DEFAULT_INTERPRETERS,
 )
 
 
 def _node(name, **kwargs) -> Node:
     return Node(id=str(uuid.uuid4()), name=name, type=NodeType.NOOP, **kwargs)
+
+
+def _script_node(name, language, body, node_id=None, **kwargs) -> Node:
+    return Node(
+        id=node_id or str(uuid.uuid4()), name=name, type=NodeType.SCRIPT,
+        type_data={"language": language, "body": body}, **kwargs
+    )
 
 
 def test_traverse_empty_graph_yields_nothing():
@@ -197,22 +205,22 @@ def test_write_timestamped_bash_script_does_not_touch_static_script(tmp_path):
 
 def test_declare_variable_assign():
     v = Variable(name="ENV", value="prod", operation=VariableOperation.ASSIGN)
-    assert _declare_variable(v) == "ENV='prod'"
+    assert _declare_variable(v) == "ENV='prod'\nexport ENV"
 
 
 def test_declare_variable_concat():
     v = Variable(name="MSG", value="world", operation=VariableOperation.CONCAT)
-    assert _declare_variable(v) == "MSG+='world'"
+    assert _declare_variable(v) == "MSG+='world'\nexport MSG"
 
 
 def test_declare_variable_add():
     v = Variable(name="COUNT", value="1", operation=VariableOperation.ADD)
-    assert _declare_variable(v) == "COUNT=$((COUNT + 1))"
+    assert _declare_variable(v) == "COUNT=$((COUNT + 1))\nexport COUNT"
 
 
 def test_declare_variable_unknown_operation_falls_back_to_assign():
     v = Variable(name="ENV", value="prod", operation="unknown")
-    assert _declare_variable(v) == "ENV='prod'"
+    assert _declare_variable(v) == "ENV='prod'\nexport ENV"
 
 
 def test_generate_bash_script_includes_active_global_variable():
@@ -224,6 +232,7 @@ def test_generate_bash_script_includes_active_global_variable():
         "echo Executing flow 'demo.flow'\n"
         "\n"
         "ENV='prod'\n"
+        "export ENV\n"
     )
 
 
@@ -249,6 +258,7 @@ def test_generate_bash_script_includes_active_local_variable():
         "FL_NODE_NAME='build'\n"
         "echo Executing ${FL_NODE_NAME}\n"
         "TARGET='release'\n"
+        "export TARGET\n"
     )
 
 
@@ -269,10 +279,12 @@ def test_generate_bash_script_global_and_local_variables_combined():
         "echo Executing flow 'demo.flow'\n"
         "\n"
         "ENV='prod'\n"
+        "export ENV\n"
         "\n"
         "FL_NODE_NAME='build'\n"
         "echo Executing ${FL_NODE_NAME}\n"
         "TARGET='release'\n"
+        "export TARGET\n"
     )
 
 
@@ -285,3 +297,103 @@ def test_generate_bash_script_concat_and_add_operations():
     script = generate_bash_script(graph, "demo.flow")
     assert "MSG+='world'\n" in script
     assert "COUNT=$((COUNT + 1))\n" in script
+
+
+def test_generate_bash_script_exports_variables_for_external_interpreters():
+    # Variables must be exported (not just assigned) so that an external
+    # interpreter invoked via heredoc (see _script_body_lines) can see them
+    # in its own process environment (os.environ, $env:, process.env, ...).
+    n = _script_node("build", "python", "print(1)", node_id="node1",
+                      variables=[Variable(name="TARGET", value="release")])
+    graph = Graph(roots=[n], variables=[Variable(name="ENV", value="prod")])
+    script = generate_bash_script(graph, "demo.flow")
+    assert "ENV='prod'\nexport ENV\n" in script
+    assert "TARGET='release'\nexport TARGET\n" in script
+
+
+def test_script_body_lines_bash_is_inline():
+    n = _script_node("build", "bash", "echo hello")
+    assert _script_body_lines(n, DEFAULT_INTERPRETERS) == ["echo hello"]
+
+
+def test_script_body_lines_empty_body_yields_nothing():
+    n = _script_node("build", "bash", "")
+    assert _script_body_lines(n, DEFAULT_INTERPRETERS) == []
+
+
+def test_script_body_lines_non_script_node_yields_nothing():
+    n = _node("build")
+    n.type_data = {"language": "python", "body": "print(1)"}
+    assert _script_body_lines(n, DEFAULT_INTERPRETERS) == []
+
+
+def test_script_body_lines_python_uses_heredoc_with_configured_command():
+    n = _script_node("build", "python", "print('hi')", node_id="abc-123")
+    assert _script_body_lines(n, DEFAULT_INTERPRETERS) == [
+        "python3 <<'FL_SCRIPT_abc-123'",
+        "print('hi')",
+        "FL_SCRIPT_abc-123",
+    ]
+
+
+def test_script_body_lines_unknown_language_falls_back_to_inline():
+    n = _script_node("build", "ruby", "puts 1")
+    assert _script_body_lines(n, DEFAULT_INTERPRETERS) == ["puts 1"]
+
+
+def test_script_body_lines_uses_custom_interpreter_override():
+    n = _script_node("build", "python", "print(1)", node_id="xyz")
+    custom = {**DEFAULT_INTERPRETERS, "python": "/usr/bin/python3.11"}
+    lines = _script_body_lines(n, custom)
+    assert lines[0] == "/usr/bin/python3.11 <<'FL_SCRIPT_xyz'"
+
+
+def test_script_body_lines_strips_trailing_newline():
+    n = _script_node("build", "bash", "echo hi\n")
+    assert _script_body_lines(n, DEFAULT_INTERPRETERS) == ["echo hi"]
+
+
+def test_generate_bash_script_includes_script_body_after_variables():
+    n = _script_node("build", "bash", "echo hi", variables=[Variable(name="TARGET", value="release")])
+    graph = Graph(roots=[n])
+    script = generate_bash_script(graph, "demo.flow")
+    assert script == (
+        "#!/bin/bash\n"
+        "\n"
+        "echo Executing flow 'demo.flow'\n"
+        "\n"
+        "FL_NODE_NAME='build'\n"
+        "echo Executing ${FL_NODE_NAME}\n"
+        "TARGET='release'\n"
+        "export TARGET\n"
+        "echo hi\n"
+    )
+
+
+def test_generate_bash_script_uses_custom_interpreters_argument():
+    n = _script_node("build", "javascript", "console.log(1)", node_id="node1")
+    graph = Graph(roots=[n])
+    custom = {**DEFAULT_INTERPRETERS, "javascript": "nodejs"}
+    script = generate_bash_script(graph, "demo.flow", interpreters=custom)
+    assert "nodejs <<'FL_SCRIPT_node1'" in script
+
+
+def test_generate_bash_script_default_interpreters_used_when_not_passed():
+    n = _script_node("build", "python", "print(1)", node_id="node2")
+    graph = Graph(roots=[n])
+    script = generate_bash_script(graph, "demo.flow")
+    assert "python3 <<'FL_SCRIPT_node2'" in script
+
+
+def test_generate_bash_script_empty_script_body_adds_nothing():
+    n = _script_node("build", "bash", "")
+    graph = Graph(roots=[n])
+    script = generate_bash_script(graph, "demo.flow")
+    assert script == (
+        "#!/bin/bash\n"
+        "\n"
+        "echo Executing flow 'demo.flow'\n"
+        "\n"
+        "FL_NODE_NAME='build'\n"
+        "echo Executing ${FL_NODE_NAME}\n"
+    )

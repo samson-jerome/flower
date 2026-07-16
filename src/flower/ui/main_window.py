@@ -18,6 +18,7 @@ from flower.ui.preferences_dialog import PreferencesDialog
 from flower.ui.theme import is_dark
 from flower.io.xml_writer import write_flow
 from flower.io.xml_reader import read_flow
+from flower.ui.interpreters import load_interpreters
 from flower.execution.bash_generator import write_bash_script, write_timestamped_bash_script
 from flower.execution.launcher import launch_in_terminal
 
@@ -217,7 +218,7 @@ class MainWindow(QMainWindow):
             self._save_as()
             if self._path is None:  # user cancelled the save dialog
                 return
-        write_bash_script(self._graph, self._path)
+        write_bash_script(self._graph, self._path, interpreters=load_interpreters())
         self.statusBar().showMessage(
             f"Script généré : {self._path.with_suffix('.sh').name}", 3000
         )
@@ -228,7 +229,9 @@ class MainWindow(QMainWindow):
             if self._path is None:  # user cancelled the save dialog
                 return
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        script_path = write_timestamped_bash_script(self._graph, self._path, timestamp)
+        script_path = write_timestamped_bash_script(
+            self._graph, self._path, timestamp, interpreters=load_interpreters()
+        )
         if launch_in_terminal(script_path):
             self.statusBar().showMessage(f"Script lancé : {script_path.name}", 3000)
         else:

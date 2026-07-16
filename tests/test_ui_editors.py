@@ -32,3 +32,14 @@ def test_make_type_editor_all_types(qapp):
     for ntype in NodeType:
         w = make_type_editor(ntype)
         assert w is not None
+
+
+def test_script_editor_language_combo_is_not_editable(qapp):
+    editor = ScriptEditor()
+    assert not editor._language.isEditable()
+
+
+def test_script_editor_unknown_language_falls_back_to_bash(qapp):
+    editor = ScriptEditor()
+    editor.set_data({"language": "ruby", "body": "puts 1"})
+    assert editor.get_data()["language"] == "bash"

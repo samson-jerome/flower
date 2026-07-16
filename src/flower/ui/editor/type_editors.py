@@ -25,7 +25,6 @@ class ScriptEditor(QWidget):
         super().__init__(parent)
         self._language = QComboBox()
         self._language.addItems(["bash", "python", "sh", "powershell", "javascript"])
-        self._language.setEditable(True)
 
         self._body = QTextEdit()
         mono = QFont("Monospace")
@@ -42,10 +41,7 @@ class ScriptEditor(QWidget):
     def set_data(self, data: dict) -> None:
         lang = data.get("language", "bash")
         idx = self._language.findText(lang)
-        if idx >= 0:
-            self._language.setCurrentIndex(idx)
-        else:
-            self._language.setCurrentText(lang)
+        self._language.setCurrentIndex(idx if idx >= 0 else 0)
         self._body.setPlainText(data.get("body", ""))
 
     def get_data(self) -> dict:
