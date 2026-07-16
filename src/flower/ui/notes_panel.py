@@ -1,7 +1,7 @@
 from __future__ import annotations
 from pathlib import Path
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QCheckBox, QPushButton, QTextEdit, QSizePolicy, QSplitter,
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTextEdit, QSizePolicy, QSplitter,
 )
 from PySide6.QtCore import Signal, Qt, QSize
 from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor
@@ -26,9 +26,11 @@ def _tinted_icon(svg_path: Path, color: str, size: int = 16) -> QIcon:
 
 
 class CollapsibleSection(QWidget):
-    """Collapsible widget — a header with a checkbox and a content widget.
+    """Collapsible widget — a header with a clickable icon+title button and
+    a content widget.
 
-    The checkbox only hides/shows the content; the header stays visible.
+    Clicking anywhere on the header (icon or title) toggles the content;
+    the header itself stays visible.
     """
 
     collapsed_changed = Signal(bool)
@@ -36,9 +38,19 @@ class CollapsibleSection(QWidget):
     def __init__(self, title: str, content: QWidget, parent=None):
         super().__init__(parent)
 
-        self._toggle = QCheckBox(title)
+        self._current_text_color = "#000000"
+
+        self._toggle = QPushButton(title)
+        self._toggle.setCheckable(True)
         self._toggle.setChecked(True)
+        self._toggle.setFlat(True)
+        self._toggle.setStyleSheet(
+            "QPushButton { text-align: left; border: none; background: transparent; padding: 0; }"
+        )
+        self._toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._toggle.setIconSize(QSize(16, 16))
         self._toggle.toggled.connect(self._on_toggled)
+        self._update_icon()
 
         header = QHBoxLayout()
         header.setContentsMargins(0, 0, 0, 0)
@@ -97,6 +109,11 @@ class CollapsibleSection(QWidget):
 
     def _apply_collapsed(self) -> None:
         self._content.setVisible(self._toggle.isChecked())
+        self._update_icon()
+
+    def _update_icon(self) -> None:
+        svg_path = _ICON_EXPANDED if self._toggle.isChecked() else _ICON_COLLAPSED
+        self._toggle.setIcon(_tinted_icon(svg_path, self._current_text_color))
 
 
 class NotesPanel(CollapsibleSection):

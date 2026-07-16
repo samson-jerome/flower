@@ -104,3 +104,21 @@ def test_tinted_icon_differs_by_color(qapp):
     red_image = _tinted_icon(_ICON_EXPANDED, "#ff0000").pixmap(16, 16).toImage()
     green_image = _tinted_icon(_ICON_EXPANDED, "#00ff00").pixmap(16, 16).toImage()
     assert red_image != green_image
+
+
+def test_notes_panel_icon_changes_on_collapse(qapp):
+    p = NotesPanel()
+    expanded_icon_key = p._toggle.icon().cacheKey()
+
+    p.set_collapsed(True)
+    collapsed_icon_key = p._toggle.icon().cacheKey()
+
+    assert expanded_icon_key != collapsed_icon_key
+
+
+def test_notes_panel_header_is_checkable_button(qapp):
+    from PySide6.QtWidgets import QPushButton
+
+    p = NotesPanel()
+    assert isinstance(p._toggle, QPushButton)
+    assert p._toggle.isCheckable() is True
