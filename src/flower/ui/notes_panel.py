@@ -75,7 +75,7 @@ class CollapsibleSection(QWidget):
     def set_collapsed(self, collapsed: bool) -> None:
         if self.is_collapsed() == collapsed:
             return
-        # Block the QCheckBox signal to avoid double-firing via _on_toggled,
+        # Block the toggle button's signal to avoid double-firing via _on_toggled,
         # then emit collapsed_changed ourselves so listeners (splitter binding)
         # react to programmatic changes the same as user clicks.
         blocked = self._toggle.blockSignals(True)
