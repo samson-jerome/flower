@@ -1,4 +1,5 @@
 import uuid
+from PySide6.QtWidgets import QMessageBox
 from flower.models.node import Node, NodeType, Variable
 from flower.ui.editor.node_form import NodeForm
 
@@ -9,6 +10,15 @@ def _make_node():
         type_data={"language": "bash", "body": "make build"},
         variables=[Variable(name="X", value="1")],
     )
+
+
+def _make_node_with_children(count):
+    node = Node(id=str(uuid.uuid4()), name="check", type=NodeType.NOOP)
+    for i in range(count):
+        child = Node(id=str(uuid.uuid4()), name=f"child{i}", type=NodeType.NOOP)
+        child.parent = node
+        node.children.append(child)
+    return node
 
 
 def test_node_form_initial_values(qapp):
@@ -56,3 +66,40 @@ def test_variables_survive_collapse(qapp):
     form._vars.set_collapsed(True)
     data = form.get_node_data()
     assert [v.name for v in data["variables"]] == ["X"]
+
+
+def test_type_change_to_if_blocked_when_too_many_children(qapp, monkeypatch):
+    node = _make_node_with_children(3)
+    form = NodeForm(node)
+    warned = []
+    monkeypatch.setattr(QMessageBox, "warning", staticmethod(lambda *a, **k: warned.append(a)))
+
+    form._type_combo.setCurrentIndex(form._type_combo.findText("if"))
+
+    assert warned
+    assert form._type_combo.currentData() == NodeType.NOOP
+    assert node.type == NodeType.NOOP
+
+
+def test_type_change_to_if_allowed_with_two_children(qapp, monkeypatch):
+    node = _make_node_with_children(2)
+    form = NodeForm(node)
+    warned = []
+    monkeypatch.setattr(QMessageBox, "warning", staticmethod(lambda *a, **k: warned.append(a)))
+
+    form._type_combo.setCurrentIndex(form._type_combo.findText("if"))
+
+    assert not warned
+    assert form._type_combo.currentData() == NodeType.IF
+
+
+def test_type_change_to_if_allowed_with_no_children(qapp, monkeypatch):
+    node = _make_node_with_children(0)
+    form = NodeForm(node)
+    warned = []
+    monkeypatch.setattr(QMessageBox, "warning", staticmethod(lambda *a, **k: warned.append(a)))
+
+    form._type_combo.setCurrentIndex(form._type_combo.findText("if"))
+
+    assert not warned
+    assert form._type_combo.currentData() == NodeType.IF

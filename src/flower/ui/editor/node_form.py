@@ -2,10 +2,10 @@ from __future__ import annotations
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QFormLayout,
     QLineEdit, QCheckBox, QComboBox, QStackedWidget, QSplitter, QScrollArea,
-    QApplication,
+    QApplication, QMessageBox,
 )
 from PySide6.QtCore import Qt
-from flower.models.node import Node, NodeType
+from flower.models.node import Node, NodeType, MAX_CHILDREN
 from flower.ui.editor.type_editors import make_type_editor
 from flower.ui.vars_panel import VarsPanel
 from flower.ui.notes_panel import NotesPanel, bind_notes_to_splitter
@@ -118,7 +118,20 @@ class NodeForm(QWidget):
         self._name.setText(name)
 
     def _on_type_changed(self, _index: int) -> None:
-        self._refresh_type_editor(NodeType(self._type_combo.currentData()))
+        ntype = NodeType(self._type_combo.currentData())
+        max_children = MAX_CHILDREN.get(ntype)
+        if max_children is not None and len(self._node.children) > max_children:
+            QMessageBox.warning(
+                self, "Type incompatible",
+                f"Un nœud « {ntype.value} » ne peut avoir plus de {max_children} enfant(s) "
+                f"(celui-ci en a {len(self._node.children)}). "
+                "Réduisez d'abord le nombre d'enfants avant de changer le type.",
+            )
+            blocked = self._type_combo.blockSignals(True)
+            self._type_combo.setCurrentText(self._node.type.value)
+            self._type_combo.blockSignals(blocked)
+            return
+        self._refresh_type_editor(ntype)
 
     def _refresh_type_editor(self, ntype: NodeType) -> None:
         editor = self._type_editors[ntype]
