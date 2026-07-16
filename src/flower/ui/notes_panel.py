@@ -1,8 +1,28 @@
 from __future__ import annotations
+from pathlib import Path
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QCheckBox, QTextEdit, QSizePolicy, QSplitter,
+    QWidget, QVBoxLayout, QHBoxLayout, QCheckBox, QPushButton, QTextEdit, QSizePolicy, QSplitter,
 )
-from PySide6.QtCore import Signal, Qt
+from PySide6.QtCore import Signal, Qt, QSize
+from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor
+from PySide6.QtSvg import QSvgRenderer
+
+_ASSETS_DIR = Path(__file__).resolve().parents[3] / "assets" / "icons"
+_ICON_EXPANDED = _ASSETS_DIR / "chevron-down.svg"
+_ICON_COLLAPSED = _ASSETS_DIR / "chevron-right.svg"
+
+
+def _tinted_icon(svg_path: Path, color: str, size: int = 16) -> QIcon:
+    """Render an SVG file into a QIcon, recolored to `color`."""
+    renderer = QSvgRenderer(str(svg_path))
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    renderer.render(painter)
+    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+    painter.fillRect(pixmap.rect(), QColor(color))
+    painter.end()
+    return QIcon(pixmap)
 
 
 class CollapsibleSection(QWidget):

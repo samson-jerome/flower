@@ -78,3 +78,29 @@ def test_bind_notes_to_splitter_shrinks_and_restores(qapp):
     notes.set_collapsed(False)
     qapp.processEvents()
     assert splitter.sizes() == sizes_before
+
+
+def test_tinted_icon_recolors_svg_pixels(qapp):
+    from flower.ui.notes_panel import _tinted_icon, _ICON_EXPANDED
+
+    icon = _tinted_icon(_ICON_EXPANDED, "#ff0000")
+    image = icon.pixmap(16, 16).toImage()
+
+    found_colored_pixel = False
+    for y in range(image.height()):
+        for x in range(image.width()):
+            color = image.pixelColor(x, y)
+            if color.alpha() > 0:
+                found_colored_pixel = True
+                assert color.red() > 200
+                assert color.green() < 50
+                assert color.blue() < 50
+    assert found_colored_pixel
+
+
+def test_tinted_icon_differs_by_color(qapp):
+    from flower.ui.notes_panel import _tinted_icon, _ICON_EXPANDED
+
+    red_image = _tinted_icon(_ICON_EXPANDED, "#ff0000").pixmap(16, 16).toImage()
+    green_image = _tinted_icon(_ICON_EXPANDED, "#00ff00").pixmap(16, 16).toImage()
+    assert red_image != green_image
