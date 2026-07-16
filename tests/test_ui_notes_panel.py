@@ -134,3 +134,33 @@ def test_notes_panel_theme_retints_icon(qapp):
     green_icon_key = p._toggle.icon().cacheKey()
 
     assert red_icon_key != green_icon_key
+
+
+def test_notes_panel_toggle_fills_header_width(qapp):
+    p = NotesPanel()
+    p.resize(400, 200)
+    qapp.processEvents()
+
+    margins = p.layout().contentsMargins()
+    expected_width = p.width() - margins.left() - margins.right()
+    assert p._toggle.width() >= expected_width - 2
+
+
+def test_notes_panel_click_far_from_title_toggles(qapp):
+    from PySide6.QtCore import QPoint, Qt
+    from PySide6.QtTest import QTest
+
+    p = NotesPanel(title="Description")
+    p.resize(400, 200)
+    p.show()
+    qapp.processEvents()
+
+    assert p.is_collapsed() is False
+    # Click near the right edge of the toggle button, far past where the
+    # short title text/icon render -- proves the whole header row (not
+    # just the icon+text) is clickable.
+    click_point = QPoint(p._toggle.width() - 5, p._toggle.height() // 2)
+    QTest.mouseClick(p._toggle, Qt.MouseButton.LeftButton, pos=click_point)
+    qapp.processEvents()
+
+    assert p.is_collapsed() is True

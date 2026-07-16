@@ -29,8 +29,8 @@ class CollapsibleSection(QWidget):
     """Collapsible widget — a header with a clickable icon+title button and
     a content widget.
 
-    Clicking anywhere on the header (icon or title) toggles the content;
-    the header itself stays visible.
+    Clicking anywhere on the header row (not just the icon or title) toggles
+    the content; the header itself stays visible.
     """
 
     collapsed_changed = Signal(bool)
@@ -49,13 +49,13 @@ class CollapsibleSection(QWidget):
         )
         self._toggle.setCursor(Qt.CursorShape.PointingHandCursor)
         self._toggle.setIconSize(QSize(16, 16))
+        self._toggle.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._toggle.toggled.connect(self._on_toggled)
         self._update_icon()
 
         header = QHBoxLayout()
         header.setContentsMargins(0, 0, 0, 0)
         header.addWidget(self._toggle)
-        header.addStretch()
 
         self._content = content
 
