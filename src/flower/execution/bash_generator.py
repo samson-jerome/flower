@@ -89,9 +89,10 @@ def _generate_node(
     """Lines for `node` and its subtree. Empty list if `node.is_active` is
     False (its whole subtree is skipped, matching traverse()'s former
     semantics). `indent` is the nesting depth in 4-space units, incremented
-    only when descending into an IF node's then/else block -- plain
-    parent/child sequencing (non-IF) stays at the same depth, matching the
-    flat, unindented output this replaces. `leading_blank` adds the blank
+    only when descending into an IF node's then/else block or a LOOP node's
+    body -- plain parent/child sequencing (non-IF, non-LOOP) stays at the
+    same depth, matching the flat, unindented output this replaces.
+    `leading_blank` adds the blank
     separator line used between flat sibling blocks; it is False for the
     first node of a then/else branch, since the if/else line itself already
     marks the start of that block. Only ever reads children[0]/children[1]

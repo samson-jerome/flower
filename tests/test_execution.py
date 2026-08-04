@@ -996,7 +996,7 @@ def test_generated_loop_script_passes_bash_syntax_check(tmp_path):
     )
     empty_range.parent = inner
 
-    list_child = _node("traiter")
+    list_child = _script_node("traiter", "python", 'import os\nprint(os.environ["f"])')
     list_loop = _loop_node(
         "fichiers",
         {"index": "f", "mode": "list", "items": "rapport final.txt\nl'été\n$HOME/x"},
