@@ -895,3 +895,91 @@ def test_generate_bash_script_inactive_loop_emits_nothing():
         "\n"
         "echo Executing flow 'demo.flow'\n"
     )
+
+
+def test_generate_bash_script_nested_loop_doubles_indentation():
+    inner_child = _node("corps")
+    inner = _loop_node(
+        "inner", {"index": "j", "mode": "range", "start": 0, "end": 1, "step": 1},
+        children=[inner_child],
+    )
+    inner_child.parent = inner
+    outer = _loop_node(
+        "outer", {"index": "i", "mode": "range", "start": 0, "end": 1, "step": 1},
+        children=[inner],
+    )
+    inner.parent = outer
+    graph = Graph(roots=[outer])
+    script = generate_bash_script(graph, "demo.flow")
+    assert script == (
+        "#!/bin/bash\n"
+        "\n"
+        "echo Executing flow 'demo.flow'\n"
+        "\n"
+        "FL_NODE_NAME='outer'\n"
+        "echo Executing ${FL_NODE_NAME}\n"
+        "for ((i=0; i<=1; i+=1)); do\n"
+        "    export i\n"
+        "    FL_NODE_NAME='inner'\n"
+        "    echo Executing ${FL_NODE_NAME}\n"
+        "    for ((j=0; j<=1; j+=1)); do\n"
+        "        export j\n"
+        "        FL_NODE_NAME='corps'\n"
+        "        echo Executing ${FL_NODE_NAME}\n"
+        "    done\n"
+        "done\n"
+    )
+
+
+def test_generate_bash_script_heredoc_in_loop_body_and_delimiter_not_indented():
+    # The closing heredoc delimiter must sit at column 0 or bash swallows the
+    # rest of the file -- so only the opening command line follows the padding.
+    script_child = _script_node("build", "python", "print('hi')", node_id="abc123")
+    loop = _loop_node(
+        "iter", {"index": "i", "mode": "range", "start": 0, "end": 1, "step": 1},
+        children=[script_child],
+    )
+    script_child.parent = loop
+    graph = Graph(roots=[loop])
+    script = generate_bash_script(graph, "demo.flow")
+    assert script == (
+        "#!/bin/bash\n"
+        "\n"
+        "echo Executing flow 'demo.flow'\n"
+        "\n"
+        "FL_NODE_NAME='iter'\n"
+        "echo Executing ${FL_NODE_NAME}\n"
+        "for ((i=0; i<=1; i+=1)); do\n"
+        "    export i\n"
+        "    FL_NODE_NAME='build'\n"
+        "    echo Executing ${FL_NODE_NAME}\n"
+        "    python3 <<'FL_SCRIPT_abc123'\n"
+        "print('hi')\n"
+        "FL_SCRIPT_abc123\n"
+        "done\n"
+    )
+
+
+def test_generate_bash_script_inline_script_body_not_indented_in_loop():
+    script_child = _script_node("build", "bash", "echo hi")
+    loop = _loop_node(
+        "iter", {"index": "i", "mode": "range", "start": 0, "end": 1, "step": 1},
+        children=[script_child],
+    )
+    script_child.parent = loop
+    graph = Graph(roots=[loop])
+    script = generate_bash_script(graph, "demo.flow")
+    assert script == (
+        "#!/bin/bash\n"
+        "\n"
+        "echo Executing flow 'demo.flow'\n"
+        "\n"
+        "FL_NODE_NAME='iter'\n"
+        "echo Executing ${FL_NODE_NAME}\n"
+        "for ((i=0; i<=1; i+=1)); do\n"
+        "    export i\n"
+        "    FL_NODE_NAME='build'\n"
+        "    echo Executing ${FL_NODE_NAME}\n"
+        "echo hi\n"
+        "done\n"
+    )
