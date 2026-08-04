@@ -62,12 +62,21 @@ def _loop_index(node: Node) -> str:
 
 
 def _loop_header(node: Node) -> str:
-    """The `for ...; do` line for a LOOP node. Builds a C-style arithmetic
-    loop with an inclusive upper bound, so start > end simply yields no
-    iteration -- no guard needed. Any mode value other than "list"
-    (including unrecognized legacy values) is treated as range, matching
-    LoopEditor.set_data()."""
+    """The `for ...; do` line for a LOOP node. `range` builds a C-style
+    arithmetic loop with an inclusive upper bound, so start > end simply
+    yields no iteration. `list` quotes each non-blank line of `items`
+    literally, stripping surrounding whitespace; an empty list yields
+    `for x in ; do`, which bash accepts and never iterates. Any mode value
+    other than "list" (including unrecognized legacy values) is treated as
+    range, matching LoopEditor.set_data()."""
     index = _loop_index(node)
+    if node.type_data.get("mode", "range") == "list":
+        items = " ".join(
+            _shell_quote(item)
+            for item in (line.strip() for line in node.type_data.get("items", "").splitlines())
+            if item
+        )
+        return f"for {index} in {items}; do"
     start = node.type_data.get("start", 0)
     end   = node.type_data.get("end", 0)
     step  = node.type_data.get("step", 1)

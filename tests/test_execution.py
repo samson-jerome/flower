@@ -699,3 +699,43 @@ def test_loop_header_range_start_greater_than_end_is_emitted_as_is():
 def test_loop_header_unknown_mode_treated_as_range():
     n = _loop_node("iter", {"index": "i", "mode": "legacy", "start": 0, "end": 2, "step": 1})
     assert _loop_header(n) == "for ((i=0; i<=2; i+=1)); do"
+
+
+def test_loop_header_list_quotes_each_item():
+    n = _loop_node("files", {
+        "index": "f", "mode": "list", "items": "a.txt\nrapport final.txt",
+    })
+    assert _loop_header(n) == "for f in 'a.txt' 'rapport final.txt'; do"
+
+
+def test_loop_header_list_skips_blank_lines_and_strips_edges():
+    n = _loop_node("files", {
+        "index": "f", "mode": "list", "items": "  a.txt  \n\n   \nb.txt\n",
+    })
+    assert _loop_header(n) == "for f in 'a.txt' 'b.txt'; do"
+
+
+def test_loop_header_list_empty_items_yields_empty_word_list():
+    # `for f in ; do ... done` is valid bash and never iterates.
+    n = _loop_node("files", {"index": "f", "mode": "list", "items": ""})
+    assert _loop_header(n) == "for f in ; do"
+
+
+def test_loop_header_list_only_blank_lines_yields_empty_word_list():
+    n = _loop_node("files", {"index": "f", "mode": "list", "items": "\n   \n\n"})
+    assert _loop_header(n) == "for f in ; do"
+
+
+def test_loop_header_list_escapes_single_quote():
+    n = _loop_node("files", {"index": "f", "mode": "list", "items": "l'été"})
+    assert _loop_header(n) == "for f in 'l'\\''été'; do"
+
+
+def test_loop_header_list_keeps_expansions_literal():
+    n = _loop_node("files", {"index": "f", "mode": "list", "items": "$HOME/data\n*.log"})
+    assert _loop_header(n) == "for f in '$HOME/data' '*.log'; do"
+
+
+def test_loop_header_list_empty_index_uses_fallback():
+    n = _loop_node("files", {"index": "", "mode": "list", "items": "a"})
+    assert _loop_header(n) == "for FL_LOOP_INDEX in 'a'; do"
