@@ -54,6 +54,26 @@ def _script_body_lines(node: Node, interpreters: dict[str, str], pad: str = "") 
     return [f"{pad}{command} <<'{delimiter}'", body, delimiter]
 
 
+def _loop_index(node: Node) -> str:
+    """Loop variable name for a LOOP node, falling back to a generated one
+    when the user left the field empty -- an empty name would produce
+    invalid bash and break the whole script."""
+    return node.type_data.get("index", "") or "FL_LOOP_INDEX"
+
+
+def _loop_header(node: Node) -> str:
+    """The `for ...; do` line for a LOOP node. Builds a C-style arithmetic
+    loop with an inclusive upper bound, so start > end simply yields no
+    iteration -- no guard needed. Any mode value other than "list"
+    (including unrecognized legacy values) is treated as range, matching
+    LoopEditor.set_data()."""
+    index = _loop_index(node)
+    start = node.type_data.get("start", 0)
+    end   = node.type_data.get("end", 0)
+    step  = node.type_data.get("step", 1)
+    return f"for (({index}={start}; {index}<={end}; {index}+={step})); do"
+
+
 def _generate_node(
     node: Node, interpreters: dict[str, str], indent: int = 0, leading_blank: bool = True,
 ) -> list[str]:

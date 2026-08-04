@@ -6,7 +6,8 @@ from flower.models.node import Node, NodeType, Variable, VariableOperation
 from flower.execution.traversal import traverse
 from flower.execution.bash_generator import (
     generate_bash_script, write_bash_script, write_timestamped_bash_script,
-    _declare_variable, _script_body_lines, DEFAULT_INTERPRETERS,
+    _declare_variable, _script_body_lines, _loop_index, _loop_header,
+    DEFAULT_INTERPRETERS,
 )
 
 
@@ -25,6 +26,13 @@ def _if_node(name, condition, node_id=None, **kwargs) -> Node:
     return Node(
         id=node_id or str(uuid.uuid4()), name=name, type=NodeType.IF,
         type_data={"condition": condition}, **kwargs
+    )
+
+
+def _loop_node(name, type_data=None, node_id=None, **kwargs) -> Node:
+    return Node(
+        id=node_id or str(uuid.uuid4()), name=name, type=NodeType.LOOP,
+        type_data=type_data or {}, **kwargs
     )
 
 
@@ -649,3 +657,45 @@ def test_generate_bash_script_no_regression_without_if_nodes():
         "FL_NODE_NAME='child_b'\n"
         "echo Executing ${FL_NODE_NAME}\n"
     )
+
+
+def test_loop_index_returns_field_value():
+    assert _loop_index(_loop_node("iter", {"index": "f"})) == "f"
+
+
+def test_loop_index_falls_back_when_empty():
+    assert _loop_index(_loop_node("iter", {"index": ""})) == "FL_LOOP_INDEX"
+
+
+def test_loop_index_falls_back_when_absent():
+    assert _loop_index(_loop_node("iter")) == "FL_LOOP_INDEX"
+
+
+def test_loop_header_range_with_explicit_bounds():
+    n = _loop_node("iter", {"index": "i", "mode": "range", "start": 0, "end": 10, "step": 2})
+    assert _loop_header(n) == "for ((i=0; i<=10; i+=2)); do"
+
+
+def test_loop_header_range_defaults_on_empty_type_data():
+    n = _loop_node("iter")
+    assert _loop_header(n) == (
+        "for ((FL_LOOP_INDEX=0; FL_LOOP_INDEX<=0; FL_LOOP_INDEX+=1)); do"
+    )
+
+
+def test_loop_header_range_empty_index_uses_fallback():
+    n = _loop_node("iter", {"index": "", "mode": "range", "start": 1, "end": 3, "step": 1})
+    assert _loop_header(n) == (
+        "for ((FL_LOOP_INDEX=1; FL_LOOP_INDEX<=3; FL_LOOP_INDEX+=1)); do"
+    )
+
+
+def test_loop_header_range_start_greater_than_end_is_emitted_as_is():
+    # No iteration at runtime; the C-style form makes this safe without a guard.
+    n = _loop_node("iter", {"index": "i", "mode": "range", "start": 10, "end": 0, "step": 1})
+    assert _loop_header(n) == "for ((i=10; i<=0; i+=1)); do"
+
+
+def test_loop_header_unknown_mode_treated_as_range():
+    n = _loop_node("iter", {"index": "i", "mode": "legacy", "start": 0, "end": 2, "step": 1})
+    assert _loop_header(n) == "for ((i=0; i<=2; i+=1)); do"
