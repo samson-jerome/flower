@@ -97,7 +97,14 @@ def _generate_node(
     marks the start of that block. Only ever reads children[0]/children[1]
     for an IF node -- any child beyond index 1 is silently ignored (the UI
     prevents an IF node from having more than 2 children in the first
-    place; see MAX_CHILDREN in models/node.py)."""
+    place; see MAX_CHILDREN in models/node.py).
+
+    A LOOP node wraps its whole child list in a `for` loop and exports the
+    index on every iteration, so a child script node's external interpreter
+    (invoked via heredoc, in its own process) can read it. The node's own
+    variables stay outside the loop and are therefore evaluated once. No `:`
+    filler is needed for an empty body: the `export` line already keeps
+    `do ... done` non-empty."""
     if not node.is_active:
         return []
     pad = "    " * indent
@@ -124,6 +131,12 @@ def _generate_node(
             lines.append(f"{pad}else")
             lines.extend(false_lines)
         lines.append(f"{pad}fi")
+    elif node.type == NodeType.LOOP:
+        lines.append(f"{pad}{_loop_header(node)}")
+        lines.append(f"{pad}    export {_loop_index(node)}")
+        for i, child in enumerate(node.children):
+            lines.extend(_generate_node(child, interpreters, indent + 1, leading_blank=i > 0))
+        lines.append(f"{pad}done")
     else:
         lines.extend(_script_body_lines(node, interpreters, pad))
         for child in node.children:

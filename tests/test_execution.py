@@ -739,3 +739,159 @@ def test_loop_header_list_keeps_expansions_literal():
 def test_loop_header_list_empty_index_uses_fallback():
     n = _loop_node("files", {"index": "", "mode": "list", "items": "a"})
     assert _loop_header(n) == "for FL_LOOP_INDEX in 'a'; do"
+
+
+def test_generate_bash_script_loop_range_with_one_child():
+    child = _node("étape")
+    loop = _loop_node(
+        "iter", {"index": "i", "mode": "range", "start": 0, "end": 4, "step": 2},
+        children=[child],
+    )
+    child.parent = loop
+    graph = Graph(roots=[loop])
+    script = generate_bash_script(graph, "demo.flow")
+    assert script == (
+        "#!/bin/bash\n"
+        "\n"
+        "echo Executing flow 'demo.flow'\n"
+        "\n"
+        "FL_NODE_NAME='iter'\n"
+        "echo Executing ${FL_NODE_NAME}\n"
+        "for ((i=0; i<=4; i+=2)); do\n"
+        "    export i\n"
+        "    FL_NODE_NAME='étape'\n"
+        "    echo Executing ${FL_NODE_NAME}\n"
+        "done\n"
+    )
+
+
+def test_generate_bash_script_loop_list_with_one_child():
+    child = _node("traiter")
+    loop = _loop_node(
+        "fichiers", {"index": "f", "mode": "list", "items": "a.txt\nrapport final.txt"},
+        children=[child],
+    )
+    child.parent = loop
+    graph = Graph(roots=[loop])
+    script = generate_bash_script(graph, "demo.flow")
+    assert script == (
+        "#!/bin/bash\n"
+        "\n"
+        "echo Executing flow 'demo.flow'\n"
+        "\n"
+        "FL_NODE_NAME='fichiers'\n"
+        "echo Executing ${FL_NODE_NAME}\n"
+        "for f in 'a.txt' 'rapport final.txt'; do\n"
+        "    export f\n"
+        "    FL_NODE_NAME='traiter'\n"
+        "    echo Executing ${FL_NODE_NAME}\n"
+        "done\n"
+    )
+
+
+def test_generate_bash_script_loop_no_children_needs_no_colon_filler():
+    # `export` alone keeps the do...done body non-empty, so unlike an empty
+    # conditional branch this needs no `:` no-op.
+    loop = _loop_node("iter", {"index": "i", "mode": "range", "start": 0, "end": 2, "step": 1})
+    graph = Graph(roots=[loop])
+    script = generate_bash_script(graph, "demo.flow")
+    assert script == (
+        "#!/bin/bash\n"
+        "\n"
+        "echo Executing flow 'demo.flow'\n"
+        "\n"
+        "FL_NODE_NAME='iter'\n"
+        "echo Executing ${FL_NODE_NAME}\n"
+        "for ((i=0; i<=2; i+=1)); do\n"
+        "    export i\n"
+        "done\n"
+    )
+
+
+def test_generate_bash_script_loop_inactive_child_treated_as_absent():
+    child = _node("étape", is_active=False)
+    loop = _loop_node(
+        "iter", {"index": "i", "mode": "range", "start": 0, "end": 2, "step": 1},
+        children=[child],
+    )
+    child.parent = loop
+    graph = Graph(roots=[loop])
+    script = generate_bash_script(graph, "demo.flow")
+    assert script == (
+        "#!/bin/bash\n"
+        "\n"
+        "echo Executing flow 'demo.flow'\n"
+        "\n"
+        "FL_NODE_NAME='iter'\n"
+        "echo Executing ${FL_NODE_NAME}\n"
+        "for ((i=0; i<=2; i+=1)); do\n"
+        "    export i\n"
+        "done\n"
+    )
+
+
+def test_generate_bash_script_loop_two_children_blank_line_between_only():
+    first  = _node("a")
+    second = _node("b")
+    loop = _loop_node(
+        "iter", {"index": "i", "mode": "range", "start": 0, "end": 1, "step": 1},
+        children=[first, second],
+    )
+    first.parent = loop
+    second.parent = loop
+    graph = Graph(roots=[loop])
+    script = generate_bash_script(graph, "demo.flow")
+    assert script == (
+        "#!/bin/bash\n"
+        "\n"
+        "echo Executing flow 'demo.flow'\n"
+        "\n"
+        "FL_NODE_NAME='iter'\n"
+        "echo Executing ${FL_NODE_NAME}\n"
+        "for ((i=0; i<=1; i+=1)); do\n"
+        "    export i\n"
+        "    FL_NODE_NAME='a'\n"
+        "    echo Executing ${FL_NODE_NAME}\n"
+        "\n"
+        "    FL_NODE_NAME='b'\n"
+        "    echo Executing ${FL_NODE_NAME}\n"
+        "done\n"
+    )
+
+
+def test_generate_bash_script_loop_variables_declared_once_before_for():
+    loop = _loop_node(
+        "iter", {"index": "i", "mode": "range", "start": 0, "end": 1, "step": 1},
+        variables=[Variable(name="ROOT", value="/tmp")],
+    )
+    graph = Graph(roots=[loop])
+    script = generate_bash_script(graph, "demo.flow")
+    assert script == (
+        "#!/bin/bash\n"
+        "\n"
+        "echo Executing flow 'demo.flow'\n"
+        "\n"
+        "FL_NODE_NAME='iter'\n"
+        "echo Executing ${FL_NODE_NAME}\n"
+        "ROOT='/tmp'\n"
+        "export ROOT\n"
+        "for ((i=0; i<=1; i+=1)); do\n"
+        "    export i\n"
+        "done\n"
+    )
+
+
+def test_generate_bash_script_inactive_loop_emits_nothing():
+    child = _node("étape")
+    loop = _loop_node(
+        "iter", {"index": "i", "mode": "range", "start": 0, "end": 1, "step": 1},
+        children=[child], is_active=False,
+    )
+    child.parent = loop
+    graph = Graph(roots=[loop])
+    script = generate_bash_script(graph, "demo.flow")
+    assert script == (
+        "#!/bin/bash\n"
+        "\n"
+        "echo Executing flow 'demo.flow'\n"
+    )
