@@ -1,5 +1,6 @@
 import uuid
 import os
+import subprocess
 from pathlib import Path
 from flower.models.graph import Graph
 from flower.models.node import Node, NodeType, Variable, VariableOperation
@@ -983,3 +984,41 @@ def test_generate_bash_script_inline_script_body_not_indented_in_loop():
         "echo hi\n"
         "done\n"
     )
+
+
+def test_generated_loop_script_passes_bash_syntax_check(tmp_path):
+    empty_range = _loop_node(
+        "vide", {"index": "k", "mode": "range", "start": 0, "end": 1, "step": 1},
+    )
+    inner = _loop_node(
+        "inner", {"index": "j", "mode": "range", "start": 0, "end": 2, "step": 1},
+        children=[empty_range],
+    )
+    empty_range.parent = inner
+
+    list_child = _node("traiter")
+    list_loop = _loop_node(
+        "fichiers",
+        {"index": "f", "mode": "list", "items": "rapport final.txt\nl'été\n$HOME/x"},
+        children=[list_child],
+    )
+    list_child.parent = list_loop
+
+    empty_list = _loop_node("aucun", {"index": "g", "mode": "list", "items": ""})
+
+    outer = _loop_node(
+        "outer", {"index": "i", "mode": "range", "start": 0, "end": 2, "step": 1},
+        children=[inner, list_loop, empty_list],
+    )
+    for child in outer.children:
+        child.parent = outer
+
+    graph = Graph(roots=[outer])
+    flow_path = tmp_path / "demo.flow"
+    write_bash_script(graph, flow_path)
+
+    result = subprocess.run(
+        ["bash", "-n", str(flow_path.with_suffix(".sh"))],
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
