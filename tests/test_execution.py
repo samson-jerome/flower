@@ -742,6 +742,61 @@ def test_loop_header_list_empty_index_uses_fallback():
     assert _loop_header(n) == "for FL_LOOP_INDEX in 'a'; do"
 
 
+def test_loop_header_expression_wraps_command_substitution():
+    n = _loop_node("files", {"index": "f", "mode": "expression", "expression": "ls"})
+    assert _loop_header(n) == "for f in $(ls); do"
+
+
+def test_loop_header_expression_keeps_globs_and_tilde_unquoted():
+    # The exact opposite of list mode: bash must expand these at runtime.
+    n = _loop_node("files", {"index": "f", "mode": "expression", "expression": "ls ~/*.*"})
+    assert _loop_header(n) == "for f in $(ls ~/*.*); do"
+
+
+def test_loop_header_expression_keeps_pipes_verbatim():
+    n = _loop_node("files", {
+        "index": "f", "mode": "expression", "expression": "find . -name '*.log' | sort",
+    })
+    assert _loop_header(n) == "for f in $(find . -name '*.log' | sort); do"
+
+
+def test_loop_header_expression_does_not_escape_single_quotes():
+    # Unlike list mode, quotes are the user's own bash syntax, not data.
+    n = _loop_node("files", {
+        "index": "f", "mode": "expression", "expression": 'echo "l\'été"',
+    })
+    assert _loop_header(n) == 'for f in $(echo "l\'été"); do'
+
+
+def test_loop_header_expression_keeps_internal_newlines():
+    n = _loop_node("files", {
+        "index": "f", "mode": "expression", "expression": "find . -name '*.log' \\\n  | sort",
+    })
+    assert _loop_header(n) == "for f in $(find . -name '*.log' \\\n  | sort); do"
+
+
+def test_loop_header_expression_strips_surrounding_whitespace():
+    # A QTextEdit readily leaves a trailing newline behind.
+    n = _loop_node("files", {"index": "f", "mode": "expression", "expression": "  ls -1\n\n"})
+    assert _loop_header(n) == "for f in $(ls -1); do"
+
+
+def test_loop_header_expression_empty_yields_empty_substitution():
+    # `for f in $(); do ... done` is valid bash and never iterates.
+    n = _loop_node("files", {"index": "f", "mode": "expression", "expression": ""})
+    assert _loop_header(n) == "for f in $(); do"
+
+
+def test_loop_header_expression_missing_key_yields_empty_substitution():
+    n = _loop_node("files", {"index": "f", "mode": "expression"})
+    assert _loop_header(n) == "for f in $(); do"
+
+
+def test_loop_header_expression_empty_index_uses_fallback():
+    n = _loop_node("files", {"index": "", "mode": "expression", "expression": "ls"})
+    assert _loop_header(n) == "for FL_LOOP_INDEX in $(ls); do"
+
+
 def test_generate_bash_script_loop_range_with_one_child():
     child = _node("étape")
     loop = _loop_node(
@@ -786,6 +841,62 @@ def test_generate_bash_script_loop_list_with_one_child():
         "    export f\n"
         "    FL_NODE_NAME='traiter'\n"
         "    echo Executing ${FL_NODE_NAME}\n"
+        "done\n"
+    )
+
+
+def test_generate_bash_script_loop_expression_with_one_child():
+    child = _node("traiter")
+    loop = _loop_node(
+        "fichiers", {"index": "f", "mode": "expression", "expression": "ls ~/*.*"},
+        children=[child],
+    )
+    child.parent = loop
+    graph = Graph(roots=[loop])
+    script = generate_bash_script(graph, "demo.flow")
+    assert script == (
+        "#!/bin/bash\n"
+        "\n"
+        "echo Executing flow 'demo.flow'\n"
+        "\n"
+        "FL_NODE_NAME='fichiers'\n"
+        "echo Executing ${FL_NODE_NAME}\n"
+        "for f in $(ls ~/*.*); do\n"
+        "    export f\n"
+        "    FL_NODE_NAME='traiter'\n"
+        "    echo Executing ${FL_NODE_NAME}\n"
+        "done\n"
+    )
+
+
+def test_generate_bash_script_loop_expression_with_script_child():
+    # The heredoc's opening line follows the indentation; its body and closing
+    # delimiter must stay at column 0 or bash swallows the rest of the file.
+    child = _script_node(
+        "traiter", "python", 'import os\nprint(os.environ["f"])', node_id="SID",
+    )
+    loop = _loop_node(
+        "fichiers", {"index": "f", "mode": "expression", "expression": "ls"},
+        children=[child],
+    )
+    child.parent = loop
+    graph = Graph(roots=[loop])
+    script = generate_bash_script(graph, "demo.flow")
+    assert script == (
+        "#!/bin/bash\n"
+        "\n"
+        "echo Executing flow 'demo.flow'\n"
+        "\n"
+        "FL_NODE_NAME='fichiers'\n"
+        "echo Executing ${FL_NODE_NAME}\n"
+        "for f in $(ls); do\n"
+        "    export f\n"
+        "    FL_NODE_NAME='traiter'\n"
+        "    echo Executing ${FL_NODE_NAME}\n"
+        "    python3 <<'FL_SCRIPT_SID'\n"
+        "import os\n"
+        'print(os.environ["f"])\n'
+        "FL_SCRIPT_SID\n"
         "done\n"
     )
 
@@ -1006,9 +1117,19 @@ def test_generated_loop_script_passes_bash_syntax_check(tmp_path):
 
     empty_list = _loop_node("aucun", {"index": "g", "mode": "list", "items": ""})
 
+    expr_child = _script_node("lire", "bash", 'echo "$h"')
+    expr_loop = _loop_node(
+        "calculé",
+        {"index": "h", "mode": "expression", "expression": "ls ~/*.* \\\n  | sort"},
+        children=[expr_child],
+    )
+    expr_child.parent = expr_loop
+
+    empty_expr = _loop_node("rien", {"index": "e", "mode": "expression", "expression": ""})
+
     outer = _loop_node(
         "outer", {"index": "i", "mode": "range", "start": 0, "end": 2, "step": 1},
-        children=[inner, list_loop, empty_list],
+        children=[inner, list_loop, empty_list, expr_loop, empty_expr],
     )
     for child in outer.children:
         child.parent = outer

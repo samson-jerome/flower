@@ -66,17 +66,24 @@ def _loop_header(node: Node) -> str:
     arithmetic loop with an inclusive upper bound, so start > end simply
     yields no iteration. `list` quotes each non-blank line of `items`
     literally, stripping surrounding whitespace; an empty list yields
-    `for x in ; do`, which bash accepts and never iterates. Any mode value
-    other than "list" (including unrecognized legacy values) is treated as
-    range, matching LoopEditor.set_data()."""
+    `for x in ; do`, which bash accepts and never iterates. `expression`
+    inserts the command verbatim into an unquoted command substitution, so
+    globs, `~`, pipes and variables are expanded by bash and the output is
+    word-split on whitespace -- the exact opposite of `list`, which is fully
+    literal; an empty expression yields `for x in $(); do`, valid bash that
+    never iterates. Any other mode value (including unrecognized legacy
+    values) is treated as range, matching LoopEditor.set_data()."""
     index = _loop_index(node)
-    if node.type_data.get("mode", "range") == "list":
+    mode = node.type_data.get("mode", "range")
+    if mode == "list":
         items = " ".join(
             _shell_quote(item)
             for item in (line.strip() for line in node.type_data.get("items", "").splitlines())
             if item
         )
         return f"for {index} in {items}; do"
+    if mode == "expression":
+        return f"for {index} in $({node.type_data.get('expression', '').strip()}); do"
     start = node.type_data.get("start", 0)
     end   = node.type_data.get("end", 0)
     step  = node.type_data.get("step", 1)
