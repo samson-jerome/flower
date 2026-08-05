@@ -42,6 +42,20 @@ def test_label_loop_list():
     assert node_label(n) == "iter [item: list]"
 
 
+def test_label_loop_expression():
+    n = _node("iter", NodeType.LOOP, type_data={"index": "f", "mode": "expression"})
+    assert node_label(n) == "iter [f: expr]"
+
+
+def test_label_loop_unknown_mode_falls_back_to_range():
+    # Aligned with the generator and the editor, which both treat an
+    # unrecognized mode as range.
+    n = _node("iter", NodeType.LOOP, type_data={
+        "index": "i", "mode": "legacy", "start": 0, "end": 3,
+    })
+    assert node_label(n) == "iter [i: 0..3]"
+
+
 def test_layout_single_root():
     root = _node("root")
     positions = compute_layout([root], width_fn)
