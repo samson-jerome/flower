@@ -88,13 +88,15 @@ class IfEditor(QWidget):
 class LoopEditor(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._index      = QLineEdit()
-        self._mode_range = QRadioButton("Range")
-        self._mode_list  = QRadioButton("Liste")
+        self._index           = QLineEdit()
+        self._mode_range      = QRadioButton("Range")
+        self._mode_list       = QRadioButton("Liste")
+        self._mode_expression = QRadioButton("Expression")
         self._mode_range.setChecked(True)
         self._mode_group = QButtonGroup(self)
         self._mode_group.addButton(self._mode_range)
         self._mode_group.addButton(self._mode_list)
+        self._mode_group.addButton(self._mode_expression)
 
         self._start = QSpinBox()
         self._start.setRange(-9999, 9999)
@@ -106,14 +108,21 @@ class LoopEditor(QWidget):
         self._items = QTextEdit()
         self._items.setPlaceholderText("Un item par ligne")
 
+        mono = QFont("Monospace")
+        mono.setStyleHint(QFont.StyleHint.Monospace)
+        self._expression = QTextEdit()
+        self._expression.setFont(mono)
+        self._expression.setPlaceholderText("Commande bash produisant les items")
+
         self._stack = QStackedWidget()
         range_widget = QWidget()
         range_form = QFormLayout(range_widget)
         range_form.addRow("Start:", self._start)
         range_form.addRow("End:", self._end)
         range_form.addRow("Step:", self._step)
-        self._stack.addWidget(range_widget)  # index 0 = range
-        self._stack.addWidget(self._items)   # index 1 = list
+        self._stack.addWidget(range_widget)      # index 0 = range
+        self._stack.addWidget(self._items)       # index 1 = list
+        self._stack.addWidget(self._expression)  # index 2 = expression
 
         self._mode_range.toggled.connect(
             lambda checked: self._stack.setCurrentIndex(0) if checked else None
@@ -121,10 +130,14 @@ class LoopEditor(QWidget):
         self._mode_list.toggled.connect(
             lambda checked: self._stack.setCurrentIndex(1) if checked else None
         )
+        self._mode_expression.toggled.connect(
+            lambda checked: self._stack.setCurrentIndex(2) if checked else None
+        )
 
         mode_row = QFormLayout()
         mode_row.addRow("Mode:", self._mode_range)
         mode_row.addRow("", self._mode_list)
+        mode_row.addRow("", self._mode_expression)
 
         layout = QVBoxLayout(self)
         form = QFormLayout()
@@ -134,24 +147,39 @@ class LoopEditor(QWidget):
         layout.addWidget(self._stack)
 
     def set_data(self, data: dict) -> None:
+        """Any mode value other than "list"/"expression" (including
+        unrecognized legacy values) selects range, matching _loop_header()."""
         self._index.setText(data.get("index", ""))
-        if data.get("mode", "range") == "list":
+        mode = data.get("mode", "range")
+        if mode == "list":
             self._mode_list.setChecked(True)
+        elif mode == "expression":
+            self._mode_expression.setChecked(True)
         else:
             self._mode_range.setChecked(True)
         self._start.setValue(int(data.get("start", 0)))
         self._end.setValue(int(data.get("end", 0)))
         self._step.setValue(int(data.get("step", 1)))
         self._items.setPlainText(data.get("items", ""))
+        self._expression.setPlainText(data.get("expression", ""))
 
     def get_data(self) -> dict:
+        """Every key is returned whatever the active mode, so the inactive
+        modes' values survive a round trip through the editor."""
+        if self._mode_list.isChecked():
+            mode = "list"
+        elif self._mode_expression.isChecked():
+            mode = "expression"
+        else:
+            mode = "range"
         return {
-            "index": self._index.text(),
-            "mode":  "list" if self._mode_list.isChecked() else "range",
-            "start": self._start.value(),
-            "end":   self._end.value(),
-            "step":  self._step.value(),
-            "items": self._items.toPlainText(),
+            "index":      self._index.text(),
+            "mode":       mode,
+            "start":      self._start.value(),
+            "end":        self._end.value(),
+            "step":       self._step.value(),
+            "items":      self._items.toPlainText(),
+            "expression": self._expression.toPlainText(),
         }
 
 

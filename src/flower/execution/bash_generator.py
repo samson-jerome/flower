@@ -54,21 +54,65 @@ def _script_body_lines(node: Node, interpreters: dict[str, str], pad: str = "") 
     return [f"{pad}{command} <<'{delimiter}'", body, delimiter]
 
 
+def _loop_index(node: Node) -> str:
+    """Loop variable name for a LOOP node, falling back to a generated one
+    when the user left the field empty -- an empty name would produce
+    invalid bash and break the whole script."""
+    return node.type_data.get("index", "") or "FL_LOOP_INDEX"
+
+
+def _loop_header(node: Node) -> str:
+    """The `for ...; do` line for a LOOP node. `range` builds a C-style
+    arithmetic loop with an inclusive upper bound, so start > end simply
+    yields no iteration. `list` quotes each non-blank line of `items`
+    literally, stripping surrounding whitespace; an empty list yields
+    `for x in ; do`, which bash accepts and never iterates. `expression`
+    inserts the command verbatim into an unquoted command substitution, so
+    globs, `~`, pipes and variables are expanded by bash and the output is
+    word-split on whitespace -- the exact opposite of `list`, which is fully
+    literal; an empty expression yields `for x in $(); do`, valid bash that
+    never iterates. Any other mode value (including unrecognized legacy
+    values) is treated as range, matching LoopEditor.set_data()."""
+    index = _loop_index(node)
+    mode = node.type_data.get("mode", "range")
+    if mode == "list":
+        items = " ".join(
+            _shell_quote(item)
+            for item in (line.strip() for line in node.type_data.get("items", "").splitlines())
+            if item
+        )
+        return f"for {index} in {items}; do"
+    if mode == "expression":
+        return f"for {index} in $({node.type_data.get('expression', '').strip()}); do"
+    start = node.type_data.get("start", 0)
+    end   = node.type_data.get("end", 0)
+    step  = node.type_data.get("step", 1)
+    return f"for (({index}={start}; {index}<={end}; {index}+={step})); do"
+
+
 def _generate_node(
     node: Node, interpreters: dict[str, str], indent: int = 0, leading_blank: bool = True,
 ) -> list[str]:
     """Lines for `node` and its subtree. Empty list if `node.is_active` is
     False (its whole subtree is skipped, matching traverse()'s former
     semantics). `indent` is the nesting depth in 4-space units, incremented
-    only when descending into an IF node's then/else block -- plain
-    parent/child sequencing (non-IF) stays at the same depth, matching the
-    flat, unindented output this replaces. `leading_blank` adds the blank
+    only when descending into an IF node's then/else block or a LOOP node's
+    body -- plain parent/child sequencing (non-IF, non-LOOP) stays at the
+    same depth, matching the flat, unindented output this replaces.
+    `leading_blank` adds the blank
     separator line used between flat sibling blocks; it is False for the
     first node of a then/else branch, since the if/else line itself already
     marks the start of that block. Only ever reads children[0]/children[1]
     for an IF node -- any child beyond index 1 is silently ignored (the UI
     prevents an IF node from having more than 2 children in the first
-    place; see MAX_CHILDREN in models/node.py)."""
+    place; see MAX_CHILDREN in models/node.py).
+
+    A LOOP node wraps its whole child list in a `for` loop and exports the
+    index on every iteration, so a child script node's external interpreter
+    (invoked via heredoc, in its own process) can read it. The node's own
+    variables stay outside the loop and are therefore evaluated once. No `:`
+    filler is needed for an empty body: the `export` line already keeps
+    `do ... done` non-empty."""
     if not node.is_active:
         return []
     pad = "    " * indent
@@ -95,6 +139,12 @@ def _generate_node(
             lines.append(f"{pad}else")
             lines.extend(false_lines)
         lines.append(f"{pad}fi")
+    elif node.type == NodeType.LOOP:
+        lines.append(f"{pad}{_loop_header(node)}")
+        lines.append(f"{pad}    export {_loop_index(node)}")
+        for i, child in enumerate(node.children):
+            lines.extend(_generate_node(child, interpreters, indent + 1, leading_blank=i > 0))
+        lines.append(f"{pad}done")
     else:
         lines.extend(_script_body_lines(node, interpreters, pad))
         for child in node.children:

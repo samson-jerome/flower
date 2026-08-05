@@ -40,6 +40,7 @@ def _node_to_xml(node: Node, parent_el) -> None:
         for key in ("start", "end", "step"):
             etree.SubElement(node_el, key).text = str(d.get(key, 0))
         etree.SubElement(node_el, "items").text = etree.CDATA(d.get("items", ""))
+        etree.SubElement(node_el, "expression").text = etree.CDATA(d.get("expression", ""))
 
     children_el = etree.SubElement(node_el, "children")
     for child in node.children:

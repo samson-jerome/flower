@@ -27,9 +27,11 @@ def node_label(node: Node) -> str:
     if t == NodeType.LOOP:
         idx  = d.get("index", "")
         mode = d.get("mode", "range")
-        if mode == "range":
-            return f"{node.name} [{idx}: {d.get('start', 0)}..{d.get('end', 0)}]"
-        return f"{node.name} [{idx}: list]"
+        if mode == "list":
+            return f"{node.name} [{idx}: list]"
+        if mode == "expression":
+            return f"{node.name} [{idx}: expr]"
+        return f"{node.name} [{idx}: {d.get('start', 0)}..{d.get('end', 0)}]"
     return node.name
 
 

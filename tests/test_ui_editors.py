@@ -28,6 +28,55 @@ def test_loop_editor_list_roundtrip(qapp):
     assert result["items"] == "a\nb\nc"
 
 
+def test_loop_editor_expression_roundtrip(qapp):
+    editor = LoopEditor()
+    editor.set_data({
+        "index": "f", "mode": "expression", "start": 0, "end": 0, "step": 1,
+        "items": "", "expression": "ls ~/*.*",
+    })
+    result = editor.get_data()
+    assert result["mode"] == "expression"
+    assert result["expression"] == "ls ~/*.*"
+    assert result["index"] == "f"
+
+
+def test_loop_editor_expression_selects_its_stack_page(qapp):
+    editor = LoopEditor()
+    editor.set_data({"index": "f", "mode": "expression", "expression": "ls"})
+    assert editor._mode_expression.isChecked()
+    assert editor._stack.currentWidget() is editor._expression
+
+
+def test_loop_editor_switching_mode_keeps_other_modes_values(qapp):
+    # get_data() always returns every key, so toggling modes loses nothing.
+    editor = LoopEditor()
+    editor.set_data({
+        "index": "f", "mode": "expression", "start": 2, "end": 8, "step": 3,
+        "items": "a\nb", "expression": "ls",
+    })
+    editor._mode_range.setChecked(True)
+    result = editor.get_data()
+    assert result["mode"] == "range"
+    assert result["start"] == 2
+    assert result["end"] == 8
+    assert result["step"] == 3
+    assert result["items"] == "a\nb"
+    assert result["expression"] == "ls"
+
+
+def test_loop_editor_unknown_mode_falls_back_to_range(qapp):
+    editor = LoopEditor()
+    editor.set_data({"index": "i", "mode": "legacy", "start": 0, "end": 1, "step": 1})
+    assert editor._mode_range.isChecked()
+    assert editor.get_data()["mode"] == "range"
+
+
+def test_loop_editor_missing_expression_key_yields_empty_string(qapp):
+    editor = LoopEditor()
+    editor.set_data({"index": "i", "mode": "range", "start": 0, "end": 1, "step": 1})
+    assert editor.get_data()["expression"] == ""
+
+
 def test_make_type_editor_all_types(qapp):
     for ntype in NodeType:
         w = make_type_editor(ntype)
