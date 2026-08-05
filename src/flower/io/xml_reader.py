@@ -51,6 +51,7 @@ def _read_node(el, parent: Node | None = None) -> Node:
             "end":   int(el.findtext("end", "0") or 0),
             "step":  int(el.findtext("step", "1") or 1),
             "items": el.findtext("items", "") or "",
+            "expression": el.findtext("expression", "") or "",
         }
     node.type_data = d
 

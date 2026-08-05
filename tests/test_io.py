@@ -1,4 +1,5 @@
 import uuid
+import re
 from pathlib import Path
 from flower.models.node import Node, NodeType, Variable
 from flower.models.graph import Graph
@@ -112,6 +113,42 @@ def test_roundtrip_loop(tmp_path):
     assert d["index"] == "i"
     assert d["start"] == 1
     assert d["end"] == 5
+
+
+def test_roundtrip_loop_expression(tmp_path):
+    # The expression is CDATA-wrapped: it may hold <, &, quotes and newlines.
+    expression = "ls <dir> & grep \"l'été\"\n  | sort"
+    loop = Node(
+        id=str(uuid.uuid4()), name="iter", type=NodeType.LOOP,
+        type_data={
+            "index": "f", "mode": "expression", "start": 0, "end": 0, "step": 1,
+            "items": "", "expression": expression,
+        },
+    )
+    path = tmp_path / "loop_expr.flow"
+    write_flow(Graph(roots=[loop]), path)
+    d = read_flow(path).roots[0].type_data
+    assert d["mode"] == "expression"
+    assert d["expression"] == expression
+
+
+def test_read_loop_without_expression_element_defaults_to_empty(tmp_path):
+    # Backward compatibility with .flow files written before this mode existed.
+    loop = Node(
+        id=str(uuid.uuid4()), name="iter", type=NodeType.LOOP,
+        type_data={
+            "index": "i", "mode": "range", "start": 0, "end": 2, "step": 1,
+            "items": "", "expression": "ls",
+        },
+    )
+    path = tmp_path / "legacy.flow"
+    write_flow(Graph(roots=[loop]), path)
+    stripped = re.sub(
+        r"<expression>.*?</expression>", "", path.read_text(encoding="utf-8"), flags=re.DOTALL,
+    )
+    assert "<expression>" not in stripped, "the element was not stripped; test is void"
+    path.write_text(stripped, encoding="utf-8")
+    assert read_flow(path).roots[0].type_data["expression"] == ""
 
 
 def test_roundtrip_graph_notes(tmp_path):
