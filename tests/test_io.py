@@ -127,6 +127,7 @@ def test_roundtrip_loop_expression(tmp_path):
     )
     path = tmp_path / "loop_expr.flow"
     write_flow(Graph(roots=[loop]), path)
+    assert "<expression><![CDATA[" in path.read_text(encoding="utf-8")
     d = read_flow(path).roots[0].type_data
     assert d["mode"] == "expression"
     assert d["expression"] == expression
