@@ -5,6 +5,7 @@ requires-python = ">=3.11"
 dependencies = [
     "pyside6>=6.7",
     "lxml>=5.0",
+    "pygments>=2.19",
 ]
 
 [project.scripts]
