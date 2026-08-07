@@ -2,10 +2,21 @@ from __future__ import annotations
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QFormLayout, QLabel,
     QLineEdit, QTextEdit, QComboBox, QSpinBox,
-    QRadioButton, QButtonGroup, QStackedWidget,
+    QRadioButton, QButtonGroup, QStackedWidget, QApplication,
 )
 from PySide6.QtGui import QFont
 from flower.models.node import NodeType
+from flower.ui.editor.highlighter import PygmentsHighlighter
+
+
+def _follow_palette(highlighter: PygmentsHighlighter) -> None:
+    """Keep `highlighter` in step with the application palette, the same way
+    node_form.py, main_window.py and canvas.py do for their own colours.
+    The type editors live as long as their NodeForm, so a theme change while
+    the form is open has to be picked up -- they are not rebuilt."""
+    app = QApplication.instance()
+    if app is not None:
+        app.paletteChanged.connect(lambda *_args: highlighter.refresh_theme())
 
 
 class NoopEditor(QWidget):
@@ -31,6 +42,12 @@ class ScriptEditor(QWidget):
         mono.setStyleHint(QFont.StyleHint.Monospace)
         self._body.setFont(mono)
 
+        self._highlighter = PygmentsHighlighter(
+            self._body.document(), self._language.currentText()
+        )
+        self._language.currentTextChanged.connect(self._highlighter.set_language)
+        _follow_palette(self._highlighter)
+
         layout = QVBoxLayout(self)
         form = QFormLayout()
         form.addRow("Langage:", self._language)
@@ -42,6 +59,9 @@ class ScriptEditor(QWidget):
         lang = data.get("language", "bash")
         idx = self._language.findText(lang)
         self._language.setCurrentIndex(idx if idx >= 0 else 0)
+        # Set it explicitly: assigning an index that is already current emits
+        # no signal, so the highlighter would keep the previous lexer.
+        self._highlighter.set_language(self._language.currentText())
         self._body.setPlainText(data.get("body", ""))
 
     def get_data(self) -> dict:
@@ -113,6 +133,10 @@ class LoopEditor(QWidget):
         self._expression = QTextEdit()
         self._expression.setFont(mono)
         self._expression.setPlaceholderText("Commande bash produisant les items")
+
+        # The loop expression is always bash -- nothing to connect.
+        self._highlighter = PygmentsHighlighter(self._expression.document(), "bash")
+        _follow_palette(self._highlighter)
 
         self._stack = QStackedWidget()
         range_widget = QWidget()

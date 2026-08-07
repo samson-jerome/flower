@@ -92,3 +92,48 @@ def test_script_editor_unknown_language_falls_back_to_bash(qapp):
     editor = ScriptEditor()
     editor.set_data({"language": "ruby", "body": "puts 1"})
     assert editor.get_data()["language"] == "bash"
+
+
+def test_script_editor_highlights_its_body(qapp):
+    editor = ScriptEditor()
+    editor.set_data({"language": "python", "body": "import os\n"})
+    assert editor._highlighter._spans()
+
+
+def test_script_editor_combo_drives_the_highlighter(qapp):
+    editor = ScriptEditor()
+    editor.set_data({"language": "python", "body": "import os\n"})
+    python_spans = len(editor._highlighter._spans())
+    editor._language.setCurrentText("bash")
+    assert len(editor._highlighter._spans()) != python_spans
+
+
+def test_script_editor_set_data_applies_the_language(qapp):
+    # set_data may leave the combo index unchanged, so it must set the
+    # language explicitly rather than rely on the signal.
+    editor = ScriptEditor()
+    editor.set_data({"language": "bash", "body": "echo ok\n"})
+    bash_spans = editor._highlighter._spans()
+    editor.set_data({"language": "python", "body": "echo ok\n"})
+    assert editor._highlighter._spans() != bash_spans
+
+
+def test_script_editor_unknown_language_highlights_as_bash(qapp):
+    editor = ScriptEditor()
+    editor.set_data({"language": "ruby", "body": "echo ok\n"})
+    assert editor._highlighter._spans()
+
+
+def test_loop_editor_highlights_the_expression_as_bash(qapp):
+    editor = LoopEditor()
+    editor.set_data({
+        "index": "f", "mode": "expression", "start": 0, "end": 0, "step": 1,
+        "items": "", "expression": "ls ~/*.* | sort",
+    })
+    assert editor._highlighter._spans()
+
+
+def test_loop_editor_items_field_is_not_highlighted(qapp):
+    # The Liste mode holds literal values, one per line -- not code.
+    editor = LoopEditor()
+    assert editor._highlighter.document() is editor._expression.document()
