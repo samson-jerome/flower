@@ -35,7 +35,7 @@ class PygmentsHighlighter(QSyntaxHighlighter):
         self._lexer = None
         self._cached_text: str | None = None
         self._cached_spans: list[tuple[int, int, QTextCharFormat]] = []
-        self._set_style(_DARK_STYLE if is_dark(QApplication.instance()) else _LIGHT_STYLE)
+        self.refresh_theme()
         self.set_language(language)
 
     # ── public API ──────────────────────────────────────────────────────────
