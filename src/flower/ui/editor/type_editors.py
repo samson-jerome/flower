@@ -4,9 +4,9 @@ from PySide6.QtWidgets import (
     QLineEdit, QTextEdit, QComboBox, QSpinBox,
     QRadioButton, QButtonGroup, QStackedWidget, QApplication,
 )
-from PySide6.QtGui import QFont
 from flower.models.node import NodeType
 from flower.ui import highlight_styles
+from flower.ui.editor.code_edit import CodeEdit
 from flower.ui.editor.highlighter import PygmentsHighlighter
 
 
@@ -44,10 +44,7 @@ class ScriptEditor(QWidget):
         self._language = QComboBox()
         self._language.addItems(["bash", "python", "sh", "powershell", "javascript"])
 
-        self._body = QTextEdit()
-        mono = QFont("Monospace")
-        mono.setStyleHint(QFont.StyleHint.Monospace)
-        self._body.setFont(mono)
+        self._body = CodeEdit()
 
         self._highlighter = PygmentsHighlighter(
             self._body.document(), self._language.currentText()
@@ -79,10 +76,7 @@ class DataEditor(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._command = QLineEdit()
-        self._content = QTextEdit()
-        mono = QFont("Monospace")
-        mono.setStyleHint(QFont.StyleHint.Monospace)
-        self._content.setFont(mono)
+        self._content = CodeEdit()
 
         # A DATA node declares no language, so the lexer is fixed -- python,
         # which reads well on the structured payloads these nodes carry.
@@ -140,10 +134,7 @@ class LoopEditor(QWidget):
         self._items = QTextEdit()
         self._items.setPlaceholderText("Un item par ligne")
 
-        mono = QFont("Monospace")
-        mono.setStyleHint(QFont.StyleHint.Monospace)
-        self._expression = QTextEdit()
-        self._expression.setFont(mono)
+        self._expression = CodeEdit()
         self._expression.setPlaceholderText("Commande bash produisant les items")
 
         # The loop expression is always bash -- nothing to connect.

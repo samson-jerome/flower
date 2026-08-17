@@ -1,6 +1,9 @@
 import pytest
+from PySide6.QtCore import Qt, QSettings
+from PySide6.QtTest import QTest
 from pygments.styles import get_style_by_name
 from pygments.token import Token
+from flower.ui import indent as indent_mod
 from flower.models.node import NodeType
 from flower.ui import highlight_styles
 from flower.ui.editor import highlighter as highlighter_mod
@@ -170,3 +173,35 @@ def test_a_style_preference_change_reaches_an_open_editor(qapp, monkeypatch, edi
     highlight_styles.notifier.changed.emit()
     expected = "#" + get_style_by_name("monokai").style_for_token(Token.Keyword)["color"]
     assert editor._highlighter._format_for(Token.Keyword).foreground().color().name() == expected
+
+
+@pytest.fixture
+def isolated_indent_settings(tmp_path, monkeypatch):
+    ini_path = str(tmp_path / "settings.ini")
+    monkeypatch.setattr(
+        indent_mod, "QSettings",
+        lambda: QSettings(ini_path, QSettings.Format.IniFormat),
+    )
+
+
+@pytest.mark.parametrize("editor_class, field, data", [
+    (ScriptEditor, "_body",       {"language": "bash", "body": ""}),
+    (DataEditor,   "_content",    {"command": "", "content": ""}),
+    (LoopEditor,   "_expression", {"index": "f", "mode": "expression", "start": 0,
+                                   "end": 0, "step": 1, "items": "", "expression": ""}),
+])
+def test_tab_indents_with_spaces_in_every_code_field(
+    qapp, isolated_indent_settings, editor_class, field, data
+):
+    editor = editor_class()
+    editor.set_data(data)
+    widget = getattr(editor, field)
+    QTest.keyClick(widget, Qt.Key.Key_Tab)
+    assert widget.toPlainText() == "    "
+
+
+def test_the_loop_items_field_keeps_the_plain_tab_behaviour(qapp):
+    # Liste mode holds literal values, not code -- it is not a CodeEdit, the
+    # same reason it carries no highlighter.
+    editor = LoopEditor()
+    assert type(editor._items) is not type(editor._expression)

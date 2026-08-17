@@ -1,15 +1,19 @@
 from __future__ import annotations
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QFont, QFontMetrics, QPalette
+from PySide6.QtGui import QColor, QFontMetrics, QPalette
 from PySide6.QtWidgets import (
     QApplication, QButtonGroup, QComboBox, QDialog, QFormLayout, QGroupBox,
-    QLineEdit, QPushButton, QRadioButton, QTextEdit, QVBoxLayout,
+    QLineEdit, QPushButton, QRadioButton, QSpinBox, QVBoxLayout,
 )
 from pygments.styles import get_style_by_name
 from pygments.token import Token
 from flower.ui.theme import Theme, apply_theme, load_theme, save_theme
 from flower.ui.interpreters import load_interpreters, save_interpreter
 from flower.ui.highlight_styles import DARK_STYLES, LIGHT_STYLES, load_style, save_style
+from flower.ui.indent import (
+    MAX_INDENT_WIDTH, MIN_INDENT_WIDTH, load_indent_width, save_indent_width,
+)
+from flower.ui.editor.code_edit import CodeEdit
 from flower.ui.editor.highlighter import PygmentsHighlighter
 
 _INTERPRETER_LABELS = {
@@ -30,7 +34,7 @@ _PREVIEW_SNIPPET = (
 )
 
 
-class _StylePreview(QTextEdit):
+class _StylePreview(CodeEdit):
     """Read-only sample rendered with one explicit Pygments style.
 
     Unlike the editing fields, which keep the Qt palette, this one paints the
@@ -40,12 +44,9 @@ class _StylePreview(QTextEdit):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setReadOnly(True)
-        mono = QFont("Monospace")
-        mono.setStyleHint(QFont.StyleHint.Monospace)
-        self.setFont(mono)
         self.setPlainText(_PREVIEW_SNIPPET)
         lines = _PREVIEW_SNIPPET.count("\n") + 1
-        self.setFixedHeight(QFontMetrics(mono).lineSpacing() * lines + 16)
+        self.setFixedHeight(QFontMetrics(self.font()).lineSpacing() * lines + 16)
         self._highlighter = PygmentsHighlighter(self.document(), "bash")
 
     def show_style(self, name: str) -> None:
@@ -114,6 +115,16 @@ class PreferencesDialog(QDialog):
         )
         highlight_group.setLayout(highlight_layout)
 
+        edit_group = QGroupBox("Édition")
+        edit_form = QFormLayout()
+        self._indent_spin = QSpinBox()
+        self._indent_spin.setRange(MIN_INDENT_WIDTH, MAX_INDENT_WIDTH)
+        self._indent_spin.setValue(load_indent_width())
+        self._indent_spin.setSuffix(" espaces")
+        self._indent_spin.valueChanged.connect(save_indent_width)
+        edit_form.addRow("Largeur d'indentation :", self._indent_spin)
+        edit_group.setLayout(edit_form)
+
         close_btn = QPushButton("Fermer")
         close_btn.clicked.connect(self.accept)
 
@@ -121,6 +132,7 @@ class PreferencesDialog(QDialog):
         layout.addWidget(display_group)
         layout.addWidget(interp_group)
         layout.addWidget(highlight_group)
+        layout.addWidget(edit_group)
         layout.addStretch()
         layout.addWidget(close_btn, alignment=Qt.AlignmentFlag.AlignRight)
 

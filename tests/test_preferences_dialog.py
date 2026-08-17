@@ -7,9 +7,13 @@ from pygments.token import Token
 from flower.ui import theme as theme_mod
 from flower.ui import interpreters as interpreters_mod
 from flower.ui import highlight_styles as highlight_styles_mod
+from flower.ui import indent as indent_mod
 from flower.ui.theme import Theme, load_theme, save_theme
 from flower.ui.interpreters import load_interpreters, save_interpreter
 from flower.ui.highlight_styles import DARK_STYLES, LIGHT_STYLES, load_style, save_style
+from flower.ui.indent import (
+    MAX_INDENT_WIDTH, MIN_INDENT_WIDTH, load_indent_width, save_indent_width,
+)
 from flower.execution.bash_generator import DEFAULT_INTERPRETERS
 from flower.ui.preferences_dialog import PreferencesDialog
 
@@ -26,6 +30,7 @@ def isolated_settings(tmp_path, monkeypatch):
     monkeypatch.setattr(theme_mod, "QSettings", settings_factory)
     monkeypatch.setattr(interpreters_mod, "QSettings", settings_factory)
     monkeypatch.setattr(highlight_styles_mod, "QSettings", settings_factory)
+    monkeypatch.setattr(indent_mod, "QSettings", settings_factory)
 
 
 @pytest.fixture(autouse=True)
@@ -139,3 +144,21 @@ def test_preview_is_read_only(qapp):
     dialog = PreferencesDialog()
     assert dialog._light_preview.isReadOnly()
     assert dialog._dark_preview.isReadOnly()
+
+
+def test_dialog_preselects_the_saved_indent_width(qapp):
+    save_indent_width(2)
+    dialog = PreferencesDialog()
+    assert dialog._indent_spin.value() == 2
+
+
+def test_changing_the_indent_width_saves_it(qapp):
+    dialog = PreferencesDialog()
+    dialog._indent_spin.setValue(8)
+    assert load_indent_width() == 8
+
+
+def test_the_indent_spinbox_cannot_leave_the_supported_range(qapp):
+    dialog = PreferencesDialog()
+    assert dialog._indent_spin.minimum() == MIN_INDENT_WIDTH
+    assert dialog._indent_spin.maximum() == MAX_INDENT_WIDTH
