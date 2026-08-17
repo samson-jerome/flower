@@ -84,6 +84,11 @@ class DataEditor(QWidget):
         mono.setStyleHint(QFont.StyleHint.Monospace)
         self._content.setFont(mono)
 
+        # A DATA node declares no language, so the lexer is fixed -- python,
+        # which reads well on the structured payloads these nodes carry.
+        self._highlighter = PygmentsHighlighter(self._content.document(), "python")
+        _follow_theme(self._highlighter)
+
         layout = QVBoxLayout(self)
         form = QFormLayout()
         form.addRow("Commande:", self._command)

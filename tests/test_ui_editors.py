@@ -4,7 +4,9 @@ from pygments.token import Token
 from flower.models.node import NodeType
 from flower.ui import highlight_styles
 from flower.ui.editor import highlighter as highlighter_mod
-from flower.ui.editor.type_editors import make_type_editor, ScriptEditor, LoopEditor
+from flower.ui.editor.type_editors import (
+    make_type_editor, DataEditor, ScriptEditor, LoopEditor,
+)
 
 
 def test_script_editor_roundtrip(qapp):
@@ -144,7 +146,22 @@ def test_loop_editor_items_field_is_not_highlighted(qapp):
     assert editor._highlighter.document() is editor._expression.document()
 
 
-@pytest.mark.parametrize("editor_class", [ScriptEditor, LoopEditor])
+def test_data_editor_highlights_the_content_as_python(qapp):
+    # Fixed lexer: the DATA node declares no language, and python is the
+    # closest fit for the structured payloads it usually carries.
+    editor = DataEditor()
+    editor.set_data({"command": "cat", "content": 'x = {"a": 1}  # note'})
+    assert editor._highlighter.document() is editor._content.document()
+    assert editor._highlighter._spans()
+
+
+def test_data_editor_command_field_is_not_highlighted(qapp):
+    # `Commande:` is a single-line QLineEdit -- a highlighter needs a document.
+    editor = DataEditor()
+    assert editor._highlighter.document() is not editor._command
+
+
+@pytest.mark.parametrize("editor_class", [ScriptEditor, LoopEditor, DataEditor])
 def test_a_style_preference_change_reaches_an_open_editor(qapp, monkeypatch, editor_class):
     """Node editors are non-modal, so one can sit open behind the preferences
     dialog. It must repaint on the new style, not on the next reopening."""
