@@ -1,4 +1,9 @@
+import pytest
+from pygments.styles import get_style_by_name
+from pygments.token import Token
 from flower.models.node import NodeType
+from flower.ui import highlight_styles
+from flower.ui.editor import highlighter as highlighter_mod
 from flower.ui.editor.type_editors import make_type_editor, ScriptEditor, LoopEditor
 
 
@@ -137,3 +142,14 @@ def test_loop_editor_items_field_is_not_highlighted(qapp):
     # The Liste mode holds literal values, one per line -- not code.
     editor = LoopEditor()
     assert editor._highlighter.document() is editor._expression.document()
+
+
+@pytest.mark.parametrize("editor_class", [ScriptEditor, LoopEditor])
+def test_a_style_preference_change_reaches_an_open_editor(qapp, monkeypatch, editor_class):
+    """Node editors are non-modal, so one can sit open behind the preferences
+    dialog. It must repaint on the new style, not on the next reopening."""
+    editor = editor_class()
+    monkeypatch.setattr(highlighter_mod, "load_style", lambda dark: "monokai")
+    highlight_styles.notifier.changed.emit()
+    expected = "#" + get_style_by_name("monokai").style_for_token(Token.Keyword)["color"]
+    assert editor._highlighter._format_for(Token.Keyword).foreground().color().name() == expected

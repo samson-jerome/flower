@@ -4,14 +4,8 @@ from PySide6.QtWidgets import QApplication
 from pygments.lexers import get_lexer_by_name
 from pygments.styles import get_style_by_name
 from pygments.util import ClassNotFound
+from flower.ui.highlight_styles import load_style
 from flower.ui.theme import is_dark
-
-# Built-in Pygments styles, picked by the background the app currently
-# renders on. `github-dark` rather than `monokai`: its reference background
-# (#0d1117) is close to our dark QPalette.Base (35, 35, 35) and its colours
-# are far less saturated.
-_LIGHT_STYLE = "default"
-_DARK_STYLE  = "github-dark"
 
 # Language name that means "leave it as plain text".
 PLAIN = "text"
@@ -35,6 +29,7 @@ class PygmentsHighlighter(QSyntaxHighlighter):
         self._lexer = None
         self._cached_text: str | None = None
         self._cached_spans: list[tuple[int, int, QTextCharFormat]] = []
+        self._pinned = False
         self.refresh_theme()
         self.set_language(language)
 
@@ -49,10 +44,21 @@ class PygmentsHighlighter(QSyntaxHighlighter):
             self._lexer = None
         self._invalidate()
 
+    def set_style(self, name: str) -> None:
+        """Pin an explicit Pygments style, whatever the palette in effect and
+        whatever the preferences hold. Used by the preferences preview, which
+        has to show a style the application is not rendering with. Editing
+        fields never call this -- they follow the theme."""
+        self._pinned = True
+        self._set_style(name)
+
     def refresh_theme(self) -> None:
-        """Re-read the style for the palette now in effect. Called on
-        construction and on every QApplication.paletteChanged."""
-        self._set_style(_DARK_STYLE if is_dark(QApplication.instance()) else _LIGHT_STYLE)
+        """Re-read the preferred style for the palette now in effect. Called
+        on construction, on every QApplication.paletteChanged, and when the
+        preference itself changes. A pinned style overrides all of it."""
+        if self._pinned:
+            return
+        self._set_style(load_style(is_dark(QApplication.instance())))
 
     # ── internals ───────────────────────────────────────────────────────────
 

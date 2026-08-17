@@ -6,17 +6,24 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QFont
 from flower.models.node import NodeType
+from flower.ui import highlight_styles
 from flower.ui.editor.highlighter import PygmentsHighlighter
 
 
-def _follow_palette(highlighter: PygmentsHighlighter) -> None:
-    """Keep `highlighter` in step with the application palette, the same way
-    node_form.py, main_window.py and canvas.py do for their own colours.
-    The type editors live as long as their NodeForm, so a theme change while
-    the form is open has to be picked up -- they are not rebuilt."""
+def _follow_theme(highlighter: PygmentsHighlighter) -> None:
+    """Keep `highlighter` in step with the colours in effect, the same way
+    node_form.py, main_window.py and canvas.py do for their own. The type
+    editors live as long as their NodeForm, so a change while the form is
+    open has to be picked up -- they are not rebuilt.
+
+    Two sources feed the same refresh: the palette (which background we
+    render on) and the preference (which style was picked for it). Node
+    editors are non-modal, so one can sit open behind the preferences
+    dialog -- the second connection is what repaints it there and then."""
     app = QApplication.instance()
     if app is not None:
         app.paletteChanged.connect(lambda *_args: highlighter.refresh_theme())
+    highlight_styles.notifier.changed.connect(highlighter.refresh_theme)
 
 
 class NoopEditor(QWidget):
@@ -46,7 +53,7 @@ class ScriptEditor(QWidget):
             self._body.document(), self._language.currentText()
         )
         self._language.currentTextChanged.connect(self._highlighter.set_language)
-        _follow_palette(self._highlighter)
+        _follow_theme(self._highlighter)
 
         layout = QVBoxLayout(self)
         form = QFormLayout()
@@ -136,7 +143,7 @@ class LoopEditor(QWidget):
 
         # The loop expression is always bash -- nothing to connect.
         self._highlighter = PygmentsHighlighter(self._expression.document(), "bash")
-        _follow_palette(self._highlighter)
+        _follow_theme(self._highlighter)
 
         self._stack = QStackedWidget()
         range_widget = QWidget()

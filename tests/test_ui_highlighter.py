@@ -1,8 +1,11 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QTextEdit
 from PySide6.QtGui import QColor
+from pygments.styles import get_style_by_name
 from pygments.token import Token
+from flower.ui.editor import highlighter as highlighter_mod
 from flower.ui.editor.highlighter import PygmentsHighlighter
+from flower.ui.theme import is_dark
 
 
 def _edit(language, text):
@@ -107,6 +110,52 @@ def test_spans_are_recomputed_after_an_edit(qapp):
     before = len(hl._spans())
     edit.setPlainText("import os\nimport sys\n")
     assert len(hl._spans()) != before
+
+
+def _keyword_color(hl):
+    return hl._format_for(Token.Keyword).foreground().color().name()
+
+
+def _style_keyword_color(name):
+    return "#" + get_style_by_name(name).style_for_token(Token.Keyword)["color"]
+
+
+def test_refresh_theme_applies_the_style_saved_in_preferences(qapp, monkeypatch):
+    _, hl = _edit("python", "import os\n")
+    monkeypatch.setattr(highlighter_mod, "load_style", lambda dark: "monokai")
+    hl.refresh_theme()
+    assert _keyword_color(hl) == _style_keyword_color("monokai")
+
+
+def test_refresh_theme_asks_for_the_style_of_the_current_background(qapp, monkeypatch):
+    _, hl = _edit("python", "import os\n")
+    asked = []
+    monkeypatch.setattr(
+        highlighter_mod, "load_style",
+        lambda dark: asked.append(dark) or "monokai",
+    )
+    hl.refresh_theme()
+    assert asked == [is_dark(qapp)]
+
+
+def test_set_style_pins_a_style_against_later_theme_refreshes(qapp, monkeypatch):
+    # The preferences preview shows a style the application isn't rendering
+    # with, so a palette change must not pull it back to the saved style.
+    _, hl = _edit("python", "import os\n")
+    hl.set_style("monokai")
+    monkeypatch.setattr(highlighter_mod, "load_style", lambda dark: "tango")
+    hl.refresh_theme()
+    assert _keyword_color(hl) == _style_keyword_color("monokai")
+
+
+def test_set_style_recolors_the_document(qapp):
+    # `if` is a plain Token.Keyword -- `import` would be Keyword.Namespace,
+    # which the two styles happen to colour differently from Keyword.
+    edit, hl = _edit("python", "if x:\n    pass\n")
+    before = _block_colors(edit, 0)
+    hl.set_style("monokai")
+    assert _style_keyword_color("monokai") in _block_colors(edit, 0)
+    assert _block_colors(edit, 0) != before
 
 
 def test_background_is_left_to_the_qt_palette(qapp):
