@@ -1,6 +1,6 @@
 import pytest
 from PySide6.QtCore import Qt, QSettings
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QTextCursor
 from PySide6.QtTest import QTest
 from flower.ui import indent as indent_mod
 from flower.ui.editor.code_edit import CodeEdit
@@ -72,3 +72,133 @@ def test_a_read_only_field_inserts_nothing(qapp):
     edit.setReadOnly(True)
     QTest.keyClick(edit, Qt.Key.Key_Tab)
     assert edit.toPlainText() == ""
+
+
+def _select(edit, start, end):
+    cursor = edit.textCursor()
+    cursor.setPosition(start)
+    cursor.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
+    edit.setTextCursor(cursor)
+
+
+def _put_cursor(edit, position):
+    cursor = edit.textCursor()
+    cursor.setPosition(position)
+    edit.setTextCursor(cursor)
+
+
+def _shift_tab(edit):
+    QTest.keyClick(edit, Qt.Key.Key_Backtab, Qt.KeyboardModifier.ShiftModifier)
+
+
+def test_tab_indents_every_selected_line(qapp):
+    edit = CodeEdit()
+    edit.setPlainText("un\ndeux\ntrois")
+    _select(edit, 0, len("un\ndeux\ntrois"))
+    QTest.keyClick(edit, Qt.Key.Key_Tab)
+    assert edit.toPlainText() == "    un\n    deux\n    trois"
+
+
+def test_tab_on_a_single_line_selection_still_replaces_it(qapp):
+    # Only a multi-line selection switches to block indenting.
+    edit = CodeEdit()
+    edit.setPlainText("un\ndeux")
+    _select(edit, 0, 2)
+    QTest.keyClick(edit, Qt.Key.Key_Tab)
+    assert edit.toPlainText() == "    \ndeux"
+
+
+def test_tab_ignores_a_last_line_the_selection_only_touches(qapp):
+    # The selection ends at column 0 of "trois", so that line is not indented.
+    edit = CodeEdit()
+    edit.setPlainText("un\ndeux\ntrois")
+    _select(edit, 0, len("un\ndeux\n"))
+    QTest.keyClick(edit, Qt.Key.Key_Tab)
+    assert edit.toPlainText() == "    un\n    deux\ntrois"
+
+
+def test_the_selection_survives_indenting(qapp):
+    edit = CodeEdit()
+    edit.setPlainText("un\ndeux")
+    _select(edit, 0, len("un\ndeux"))
+    QTest.keyClick(edit, Qt.Key.Key_Tab)
+    QTest.keyClick(edit, Qt.Key.Key_Tab)
+    assert edit.toPlainText() == "        un\n        deux"
+
+
+def test_the_restored_selection_covers_whole_lines(qapp):
+    edit = CodeEdit()
+    edit.setPlainText("un\ndeux")
+    _select(edit, 1, 4)  # from mid-"un" to mid-"deux"
+    QTest.keyClick(edit, Qt.Key.Key_Tab)
+    cursor = edit.textCursor()
+    assert cursor.selectionStart() == 0
+    assert cursor.selectionEnd() == len("    un\n    deux")
+
+
+def test_indenting_a_block_undoes_in_one_step(qapp):
+    edit = CodeEdit()
+    edit.setPlainText("un\ndeux\ntrois")
+    _select(edit, 0, len("un\ndeux\ntrois"))
+    QTest.keyClick(edit, Qt.Key.Key_Tab)
+    edit.undo()
+    assert edit.toPlainText() == "un\ndeux\ntrois"
+
+
+def test_shift_tab_dedents_the_cursor_line(qapp):
+    edit = CodeEdit()
+    edit.setPlainText("    echo ok")
+    _put_cursor(edit, len("    echo"))
+    _shift_tab(edit)
+    assert edit.toPlainText() == "echo ok"
+
+
+def test_shift_tab_dedents_every_selected_line(qapp):
+    edit = CodeEdit()
+    edit.setPlainText("    un\n    deux")
+    _select(edit, 0, len("    un\n    deux"))
+    _shift_tab(edit)
+    assert edit.toPlainText() == "un\ndeux"
+
+
+def test_shift_tab_removes_only_the_spaces_that_are_there(qapp):
+    edit = CodeEdit()
+    edit.setPlainText("  deux seulement")
+    _put_cursor(edit, 0)
+    _shift_tab(edit)
+    assert edit.toPlainText() == "deux seulement"
+
+
+def test_shift_tab_removes_a_leading_tab_character(qapp):
+    # A .flow written before Tab inserted spaces holds real tab characters.
+    edit = CodeEdit()
+    edit.setPlainText("\techo ok")
+    _put_cursor(edit, 0)
+    _shift_tab(edit)
+    assert edit.toPlainText() == "echo ok"
+
+
+def test_shift_tab_leaves_an_unindented_line_alone(qapp):
+    edit = CodeEdit()
+    edit.setPlainText("echo ok")
+    _put_cursor(edit, 0)
+    _shift_tab(edit)
+    assert edit.toPlainText() == "echo ok"
+
+
+def test_shift_tab_dedents_by_the_configured_width(qapp):
+    indent_mod.save_indent_width(2)
+    edit = CodeEdit()
+    edit.setPlainText("    echo ok")
+    _put_cursor(edit, 0)
+    _shift_tab(edit)
+    assert edit.toPlainText() == "  echo ok"
+
+
+def test_a_read_only_field_ignores_shift_tab(qapp):
+    edit = CodeEdit()
+    edit.setPlainText("    echo ok")
+    edit.setReadOnly(True)
+    _put_cursor(edit, 0)
+    _shift_tab(edit)
+    assert edit.toPlainText() == "    echo ok"
