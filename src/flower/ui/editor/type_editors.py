@@ -2,10 +2,28 @@ from __future__ import annotations
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QFormLayout, QLabel,
     QLineEdit, QTextEdit, QComboBox, QSpinBox,
-    QRadioButton, QButtonGroup, QStackedWidget,
+    QRadioButton, QButtonGroup, QStackedWidget, QApplication,
 )
-from PySide6.QtGui import QFont
 from flower.models.node import NodeType
+from flower.ui import highlight_styles
+from flower.ui.editor.code_edit import CodeEdit
+from flower.ui.editor.highlighter import PygmentsHighlighter
+
+
+def _follow_theme(highlighter: PygmentsHighlighter) -> None:
+    """Keep `highlighter` in step with the colours in effect, the same way
+    node_form.py, main_window.py and canvas.py do for their own. The type
+    editors live as long as their NodeForm, so a change while the form is
+    open has to be picked up -- they are not rebuilt.
+
+    Two sources feed the same refresh: the palette (which background we
+    render on) and the preference (which style was picked for it). Node
+    editors are non-modal, so one can sit open behind the preferences
+    dialog -- the second connection is what repaints it there and then."""
+    app = QApplication.instance()
+    if app is not None:
+        app.paletteChanged.connect(lambda *_args: highlighter.refresh_theme())
+    highlight_styles.notifier.changed.connect(highlighter.refresh_theme)
 
 
 class NoopEditor(QWidget):
@@ -26,10 +44,13 @@ class ScriptEditor(QWidget):
         self._language = QComboBox()
         self._language.addItems(["bash", "python", "sh", "powershell", "javascript"])
 
-        self._body = QTextEdit()
-        mono = QFont("Monospace")
-        mono.setStyleHint(QFont.StyleHint.Monospace)
-        self._body.setFont(mono)
+        self._body = CodeEdit()
+
+        self._highlighter = PygmentsHighlighter(
+            self._body.document(), self._language.currentText()
+        )
+        self._language.currentTextChanged.connect(self._highlighter.set_language)
+        _follow_theme(self._highlighter)
 
         layout = QVBoxLayout(self)
         form = QFormLayout()
@@ -42,6 +63,9 @@ class ScriptEditor(QWidget):
         lang = data.get("language", "bash")
         idx = self._language.findText(lang)
         self._language.setCurrentIndex(idx if idx >= 0 else 0)
+        # Set it explicitly: assigning an index that is already current emits
+        # no signal, so the highlighter would keep the previous lexer.
+        self._highlighter.set_language(self._language.currentText())
         self._body.setPlainText(data.get("body", ""))
 
     def get_data(self) -> dict:
@@ -52,10 +76,12 @@ class DataEditor(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._command = QLineEdit()
-        self._content = QTextEdit()
-        mono = QFont("Monospace")
-        mono.setStyleHint(QFont.StyleHint.Monospace)
-        self._content.setFont(mono)
+        self._content = CodeEdit()
+
+        # A DATA node declares no language, so the lexer is fixed -- python,
+        # which reads well on the structured payloads these nodes carry.
+        self._highlighter = PygmentsHighlighter(self._content.document(), "python")
+        _follow_theme(self._highlighter)
 
         layout = QVBoxLayout(self)
         form = QFormLayout()
@@ -108,11 +134,12 @@ class LoopEditor(QWidget):
         self._items = QTextEdit()
         self._items.setPlaceholderText("Un item par ligne")
 
-        mono = QFont("Monospace")
-        mono.setStyleHint(QFont.StyleHint.Monospace)
-        self._expression = QTextEdit()
-        self._expression.setFont(mono)
+        self._expression = CodeEdit()
         self._expression.setPlaceholderText("Commande bash produisant les items")
+
+        # The loop expression is always bash -- nothing to connect.
+        self._highlighter = PygmentsHighlighter(self._expression.document(), "bash")
+        _follow_theme(self._highlighter)
 
         self._stack = QStackedWidget()
         range_widget = QWidget()

@@ -1,5 +1,15 @@
+import pytest
+from PySide6.QtCore import Qt, QSettings
+from PySide6.QtTest import QTest
+from pygments.styles import get_style_by_name
+from pygments.token import Token
+from flower.ui import indent as indent_mod
 from flower.models.node import NodeType
-from flower.ui.editor.type_editors import make_type_editor, ScriptEditor, LoopEditor
+from flower.ui import highlight_styles
+from flower.ui.editor import highlighter as highlighter_mod
+from flower.ui.editor.type_editors import (
+    make_type_editor, DataEditor, ScriptEditor, LoopEditor,
+)
 
 
 def test_script_editor_roundtrip(qapp):
@@ -92,3 +102,106 @@ def test_script_editor_unknown_language_falls_back_to_bash(qapp):
     editor = ScriptEditor()
     editor.set_data({"language": "ruby", "body": "puts 1"})
     assert editor.get_data()["language"] == "bash"
+
+
+def test_script_editor_highlights_its_body(qapp):
+    editor = ScriptEditor()
+    editor.set_data({"language": "python", "body": "import os\n"})
+    assert editor._highlighter._spans()
+
+
+def test_script_editor_combo_drives_the_highlighter(qapp):
+    editor = ScriptEditor()
+    editor.set_data({"language": "python", "body": "import os\n"})
+    python_spans = len(editor._highlighter._spans())
+    editor._language.setCurrentText("bash")
+    assert len(editor._highlighter._spans()) != python_spans
+
+
+def test_script_editor_set_data_applies_the_language(qapp):
+    # set_data may leave the combo index unchanged, so it must set the
+    # language explicitly rather than rely on the signal.
+    editor = ScriptEditor()
+    editor.set_data({"language": "bash", "body": "echo ok\n"})
+    bash_spans = editor._highlighter._spans()
+    editor.set_data({"language": "python", "body": "echo ok\n"})
+    assert editor._highlighter._spans() != bash_spans
+
+
+def test_script_editor_unknown_language_highlights_as_bash(qapp):
+    editor = ScriptEditor()
+    editor.set_data({"language": "ruby", "body": "echo ok\n"})
+    assert editor._highlighter._spans()
+
+
+def test_loop_editor_highlights_the_expression_as_bash(qapp):
+    editor = LoopEditor()
+    editor.set_data({
+        "index": "f", "mode": "expression", "start": 0, "end": 0, "step": 1,
+        "items": "", "expression": "ls ~/*.* | sort",
+    })
+    assert editor._highlighter._spans()
+
+
+def test_loop_editor_items_field_is_not_highlighted(qapp):
+    # The Liste mode holds literal values, one per line -- not code.
+    editor = LoopEditor()
+    assert editor._highlighter.document() is editor._expression.document()
+
+
+def test_data_editor_highlights_the_content_as_python(qapp):
+    # Fixed lexer: the DATA node declares no language, and python is the
+    # closest fit for the structured payloads it usually carries.
+    editor = DataEditor()
+    editor.set_data({"command": "cat", "content": 'x = {"a": 1}  # note'})
+    assert editor._highlighter.document() is editor._content.document()
+    assert editor._highlighter._spans()
+
+
+def test_data_editor_command_field_is_not_highlighted(qapp):
+    # `Commande:` is a single-line QLineEdit -- a highlighter needs a document.
+    editor = DataEditor()
+    assert editor._highlighter.document() is not editor._command
+
+
+@pytest.mark.parametrize("editor_class", [ScriptEditor, LoopEditor, DataEditor])
+def test_a_style_preference_change_reaches_an_open_editor(qapp, monkeypatch, editor_class):
+    """Node editors are non-modal, so one can sit open behind the preferences
+    dialog. It must repaint on the new style, not on the next reopening."""
+    editor = editor_class()
+    monkeypatch.setattr(highlighter_mod, "load_style", lambda dark: "monokai")
+    highlight_styles.notifier.changed.emit()
+    expected = "#" + get_style_by_name("monokai").style_for_token(Token.Keyword)["color"]
+    assert editor._highlighter._format_for(Token.Keyword).foreground().color().name() == expected
+
+
+@pytest.fixture
+def isolated_indent_settings(tmp_path, monkeypatch):
+    ini_path = str(tmp_path / "settings.ini")
+    monkeypatch.setattr(
+        indent_mod, "QSettings",
+        lambda: QSettings(ini_path, QSettings.Format.IniFormat),
+    )
+
+
+@pytest.mark.parametrize("editor_class, field, data", [
+    (ScriptEditor, "_body",       {"language": "bash", "body": ""}),
+    (DataEditor,   "_content",    {"command": "", "content": ""}),
+    (LoopEditor,   "_expression", {"index": "f", "mode": "expression", "start": 0,
+                                   "end": 0, "step": 1, "items": "", "expression": ""}),
+])
+def test_tab_indents_with_spaces_in_every_code_field(
+    qapp, isolated_indent_settings, editor_class, field, data
+):
+    editor = editor_class()
+    editor.set_data(data)
+    widget = getattr(editor, field)
+    QTest.keyClick(widget, Qt.Key.Key_Tab)
+    assert widget.toPlainText() == "    "
+
+
+def test_the_loop_items_field_keeps_the_plain_tab_behaviour(qapp):
+    # Liste mode holds literal values, not code -- it is not a CodeEdit, the
+    # same reason it carries no highlighter.
+    editor = LoopEditor()
+    assert type(editor._items) is not type(editor._expression)
