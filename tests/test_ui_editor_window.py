@@ -94,11 +94,11 @@ def test_exec_button_applies_the_form_before_emitting(qapp):
     win  = EditorWindow(node)
     win._form._executable.setChecked(True)
     win._form._name.setText("renamed")
-    received = []
-    win.exec_requested.connect(received.append)
+    seen = []
+    # Capture the node as the receiver will see it: a receiver that read a
+    # stale node would run a script built from values the user never applied.
+    win.exec_requested.connect(
+        lambda node_id: seen.append((node_id, node.name, node.is_executable))
+    )
     win._exec_btn.click()
-    assert received == [node.id]
-    # The click committed the form first, so the model the receiver will read
-    # holds the pending edits.
-    assert node.name == "renamed"
-    assert node.is_executable is True
+    assert seen == [(node.id, "renamed", True)]
