@@ -8,7 +8,7 @@ from flower.models.node import Node, NodeType, Variable, VariableOperation
 from flower.execution.traversal import traverse, prune_to_node
 from flower.execution.bash_generator import (
     generate_bash_script, write_bash_script, write_timestamped_bash_script,
-    _declare_variable, _script_body_lines, _loop_index, _loop_header,
+    _declare_variable, _script_body_lines, _loop_index, _loop_header, _slug,
     DEFAULT_INTERPRETERS,
 )
 
@@ -1298,3 +1298,41 @@ def test_partial_script_nested_in_a_loop_and_an_if_is_valid_bash(tmp_path):
         capture_output=True, text=True,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_slug_replaces_unsafe_characters():
+    assert _slug("build assets/v2") == "build_assets_v2"
+
+
+def test_slug_strips_leading_and_trailing_separators():
+    assert _slug("  build  ") == "build"
+
+
+def test_slug_drops_accented_characters():
+    assert _slug("étape 1") == "tape_1"
+
+
+def test_slug_falls_back_when_nothing_survives():
+    assert _slug("///") == "node"
+    assert _slug("") == "node"
+
+
+def test_slug_truncates_a_long_name():
+    assert _slug("a" * 60) == "a" * 40
+
+
+def test_write_timestamped_bash_script_without_label_keeps_the_current_name(tmp_path):
+    path = write_timestamped_bash_script(
+        Graph(roots=[_node("build")]), tmp_path / "demo.flow", "20260820-143012"
+    )
+    assert path.name == "demo_20260820-143012.sh"
+
+
+def test_write_timestamped_bash_script_with_a_label(tmp_path):
+    path = write_timestamped_bash_script(
+        Graph(roots=[_node("build")]), tmp_path / "demo.flow", "20260820-143012",
+        label="build assets/v2",
+    )
+    assert path.name == "demo_build_assets_v2_20260820-143012.sh"
+    assert path.exists()
+    assert os.access(path, os.X_OK)
