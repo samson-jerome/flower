@@ -1,12 +1,17 @@
 from __future__ import annotations
 from typing import Callable, NamedTuple
-from flower.models.node import Node, NodeType
+from flower.models.node import Node, NodeType, can_exec
 
 NODE_STEP      = 44.0
 NODE_PADDING_H = 24.0
 MIN_NODE_WIDTH = 144.0
 MAX_NODE_WIDTH = 300.0
 NODE_GAP_H     = 20.0  # horizontal gap between a parent column and its children column
+# Horizontal geometry of the Exec pill lives here, with the other widths this
+# module owns: a column has to be wide enough for the label AND the pill, or
+# the label would run under it. node_item.py imports both.
+EXEC_BTN_W  = 40.0
+EXEC_ZONE_W = EXEC_BTN_W + 6.0  # + the gap separating it from the −/+ button
 
 
 class NodePos(NamedTuple):
@@ -37,7 +42,8 @@ def node_label(node: Node) -> str:
 
 def _collect_widths(node: Node, depth: int, width_fn: Callable[[str], float], widths: dict[int, float]) -> None:
     label = node_label(node)
-    w = min(MAX_NODE_WIDTH, max(MIN_NODE_WIDTH, width_fn(label) + NODE_PADDING_H))
+    w = width_fn(label) + NODE_PADDING_H + (EXEC_ZONE_W if can_exec(node) else 0.0)
+    w = min(MAX_NODE_WIDTH, max(MIN_NODE_WIDTH, w))
     widths[depth] = max(widths.get(depth, 0.0), w)
     if not node.is_collapsed:
         for child in node.children:

@@ -1,6 +1,9 @@
 import uuid
 from flower.models.node import Node, NodeType
-from flower.layout.tree_layout import compute_layout, node_label, NODE_STEP, MIN_NODE_WIDTH
+from flower.layout.tree_layout import (
+    compute_layout, node_label, NODE_STEP, MIN_NODE_WIDTH, MAX_NODE_WIDTH,
+    NODE_PADDING_H, EXEC_BTN_W, EXEC_ZONE_W,
+)
 
 
 def _node(name, ntype=NodeType.NOOP, children=None, type_data=None):
@@ -88,3 +91,30 @@ def test_layout_two_roots_stacked():
     positions = compute_layout([r1, r2], width_fn)
     assert positions[r1.id].y == 0.0
     assert positions[r2.id].y == NODE_STEP
+
+
+def test_exec_zone_is_the_pill_plus_its_gap():
+    assert EXEC_ZONE_W == EXEC_BTN_W + 6.0
+
+
+def test_column_width_reserves_room_for_the_exec_pill():
+    node = _node("build", NodeType.SCRIPT, type_data={"language": "sh"})
+    # label "build [sh]" -> 10 * 8 = 80 px avec le width_fn de ce fichier
+    assert compute_layout([node], width_fn)[node.id].width == MIN_NODE_WIDTH
+    node.is_executable = True
+    assert (
+        compute_layout([node], width_fn)[node.id].width
+        == 80.0 + NODE_PADDING_H + EXEC_ZONE_W
+    )
+
+
+def test_column_width_ignores_the_flag_on_an_ineligible_type():
+    node = _node("check", NodeType.IF, type_data={"condition": "x"})
+    node.is_executable = True
+    assert compute_layout([node], width_fn)[node.id].width == MIN_NODE_WIDTH
+
+
+def test_column_width_stays_capped_with_the_exec_pill():
+    node = _node("x" * 60, NodeType.SCRIPT)
+    node.is_executable = True
+    assert compute_layout([node], width_fn)[node.id].width == MAX_NODE_WIDTH
