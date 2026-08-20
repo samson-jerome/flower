@@ -1,7 +1,7 @@
 import uuid
 import re
 from pathlib import Path
-from flower.models.node import Node, NodeType, Variable
+from flower.models.node import Node, NodeType, Variable, can_exec
 from flower.models.graph import Graph
 from flower.io.xml_writer import graph_to_xml, write_flow
 
@@ -175,3 +175,44 @@ def test_missing_notes_defaults_to_empty(tmp_path):
     loaded = read_flow(path)
     assert loaded.notes == ""
     assert loaded.roots[0].notes == ""
+
+
+def test_executable_flag_round_trip(tmp_path):
+    node = Node(
+        id=str(uuid.uuid4()), name="build", type=NodeType.SCRIPT,
+        type_data={"language": "bash", "body": ""}, is_executable=True,
+    )
+    path = tmp_path / "exec.flow"
+    write_flow(Graph(roots=[node]), path)
+    assert read_flow(path).roots[0].is_executable is True
+
+
+def test_executable_flag_written_as_attribute():
+    node = Node(
+        id=str(uuid.uuid4()), name="build", type=NodeType.SCRIPT,
+        type_data={"language": "bash", "body": ""}, is_executable=True,
+    )
+    assert b'executable="1"' in graph_to_xml(Graph(roots=[node]))
+
+
+def test_executable_absent_from_a_legacy_flow_reads_as_false(tmp_path):
+    path = tmp_path / "legacy.flow"
+    path.write_bytes(
+        b'<?xml version="1.0" encoding="UTF-8"?>\n'
+        b'<flow version="1.0"><children>'
+        b'<node type="script" name="build" active="1" collapsed="0"/>'
+        b'</children></flow>\n'
+    )
+    assert read_flow(path).roots[0].is_executable is False
+
+
+def test_executable_on_an_if_node_round_trips_but_can_exec_stays_false(tmp_path):
+    node = Node(
+        id=str(uuid.uuid4()), name="check", type=NodeType.IF,
+        type_data={"condition": "-f /tmp/x"}, is_executable=True,
+    )
+    path = tmp_path / "hand_edited.flow"
+    write_flow(Graph(roots=[node]), path)
+    reread = read_flow(path).roots[0]
+    assert reread.is_executable is True
+    assert can_exec(reread) is False
