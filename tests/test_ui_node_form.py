@@ -184,3 +184,31 @@ def test_exec_state_changed_follows_the_type_combo(qapp):
     form.exec_state_changed.connect(received.append)
     form._type_combo.setCurrentText(NodeType.LOOP.value)
     assert received[-1] is False
+
+
+def test_executable_row_resyncs_after_a_refused_type_change(qapp, monkeypatch):
+    node = Node(
+        id=str(uuid.uuid4()), name="build", type=NodeType.SCRIPT,
+        type_data={"language": "bash", "body": "make build"},
+    )
+    for i in range(3):
+        child = Node(id=str(uuid.uuid4()), name=f"child{i}", type=NodeType.NOOP)
+        child.parent = node
+        node.children.append(child)
+    form = NodeForm(node)
+    form._executable.setChecked(True)
+    monkeypatch.setattr(QMessageBox, "warning", staticmethod(lambda *a, **k: None))
+
+    # Step 1: switch to an eligible-for-nothing type -- allowed, disables the row.
+    form._type_combo.setCurrentText(NodeType.NOOP.value)
+    assert form._executable.isEnabled() is False
+
+    # Step 2: switch to "if" -- refused because of the 3 children, combo reverts
+    # to "script". The row must follow the reverted type, not stay stale.
+    received = []
+    form.exec_state_changed.connect(received.append)
+    form._type_combo.setCurrentText(NodeType.IF.value)
+
+    assert form._type_combo.currentData() == NodeType.SCRIPT
+    assert form._executable.isEnabled() is True
+    assert received[-1] is False

@@ -138,6 +138,11 @@ class NodeForm(QWidget):
             blocked = self._type_combo.blockSignals(True)
             self._type_combo.setCurrentText(self._node.type.value)
             self._type_combo.blockSignals(blocked)
+            # The combo is back on the node's own type, so the executable row
+            # has to follow it: otherwise it stays disabled from the type that
+            # was just refused, with an eligible type showing in the combo.
+            self._refresh_executable_row(self._node.type)
+            self._emit_exec_state()
             return
         self._refresh_type_editor(ntype)
         self._refresh_executable_row(ntype)
