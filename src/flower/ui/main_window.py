@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QSettings
 from flower.models.graph import Graph
-from flower.models.node import Node, NodeType, MAX_CHILDREN
+from flower.models.node import Node, NodeType, MAX_CHILDREN, can_exec
 from flower.ui.canvas import GraphCanvas
 from flower.ui.toolbar import ToolBar
 from flower.ui.dock_panel import DockPanel
@@ -21,6 +21,7 @@ from flower.io.xml_reader import read_flow
 from flower.ui.interpreters import load_interpreters
 from flower.execution.bash_generator import write_bash_script, write_timestamped_bash_script
 from flower.execution.launcher import launch_in_terminal
+from flower.execution.traversal import prune_to_node
 
 # (background, text) pairs, keyed by whether the app is currently dark.
 # Same palette as flower.ui.editor.node_form, for visual consistency between
@@ -138,6 +139,7 @@ class MainWindow(QMainWindow):
         self._canvas.delete_requested.connect(self._delete_selected_node)
         self._canvas.node_active_changed.connect(self.mark_dirty)
         self._canvas.drop_rejected.connect(lambda msg: self.statusBar().showMessage(msg, 3000))
+        self._canvas.node_exec_requested.connect(self._exec_node)
         self._toolbar.add_node_requested.connect(self._add_child_node)
         self._toolbar.delete_node_requested.connect(self._delete_selected_node)
         self._toolbar.refresh_requested.connect(self._canvas.refresh_layout)
@@ -241,6 +243,32 @@ class MainWindow(QMainWindow):
                 f"Impossible d'ouvrir un terminal pour exécuter {script_path.name}.",
             )
 
+    def _exec_node(self, node_id: str) -> None:
+        """Run the graph up to `node_id` included: generate the pruned script
+        next to the .flow file, then open it in a terminal. Same guards as
+        _launch_script(), plus the node's own eligibility -- both call sites
+        filter already, but this is the only place that starts an execution and
+        has to be safe on its own."""
+        node = self._canvas._find_node(node_id)
+        if node is None or not can_exec(node) or not node.is_active:
+            return
+        if self._path is None:
+            self._save_as()
+            if self._path is None:  # user cancelled the save dialog
+                return
+        script_path = write_timestamped_bash_script(
+            prune_to_node(self._graph, node_id), self._path,
+            datetime.now().strftime("%Y%m%d-%H%M%S"),
+            interpreters=load_interpreters(), label=node.name,
+        )
+        if launch_in_terminal(script_path):
+            self.statusBar().showMessage(f"Exécution partielle : {script_path.name}", 3000)
+        else:
+            QMessageBox.warning(
+                self, "Échec du lancement",
+                f"Impossible d'ouvrir un terminal pour exécuter {script_path.name}.",
+            )
+
     # ── Node operations ─────────────────────────────────────────────────────
 
     def _add_child_node(self) -> None:
@@ -300,6 +328,7 @@ class MainWindow(QMainWindow):
         win = EditorWindow(node, parent=None)
         win.node_updated.connect(self._on_node_updated)
         win.dock_requested.connect(self._on_dock_requested)
+        win.exec_requested.connect(self._exec_node)
         win.finished.connect(lambda _: self._editor_windows.pop(node_id, None))
         self._editor_windows[node_id] = win
         win.show()
@@ -356,6 +385,7 @@ class MainWindow(QMainWindow):
         win = EditorWindow(node, form=form, parent=None)
         win.node_updated.connect(self._on_node_updated)
         win.dock_requested.connect(self._on_dock_requested)
+        win.exec_requested.connect(self._exec_node)
         win.finished.connect(lambda _: self._editor_windows.pop(node_id, None))
         self._editor_windows[node_id] = win
         win.show()
