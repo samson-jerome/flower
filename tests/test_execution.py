@@ -1,10 +1,11 @@
+import pytest
 import uuid
 import os
 import subprocess
 from pathlib import Path
 from flower.models.graph import Graph
 from flower.models.node import Node, NodeType, Variable, VariableOperation
-from flower.execution.traversal import traverse
+from flower.execution.traversal import traverse, prune_to_node
 from flower.execution.bash_generator import (
     generate_bash_script, write_bash_script, write_timestamped_bash_script,
     _declare_variable, _script_body_lines, _loop_index, _loop_header,
@@ -94,6 +95,82 @@ def test_traverse_visits_collapsed_node_children():
     graph = Graph(roots=[root])
 
     assert [n.name for n in traverse(graph)] == ["root", "child"]
+
+
+def _link(parent: Node, children: list[Node]) -> Node:
+    parent.children = children
+    for child in children:
+        child.parent = parent
+    return parent
+
+
+def test_prune_keeps_only_the_targets_own_root():
+    target = _node("target")
+    root   = _link(_node("root"), [target])
+    graph  = Graph(roots=[_node("before"), root, _node("after")])
+    pruned = prune_to_node(graph, target.id)
+    assert [r.name for r in pruned.roots] == ["root"]
+
+
+def test_prune_keeps_earlier_siblings_with_their_whole_subtree():
+    early  = _link(_node("early"), [_node("early_child")])
+    target = _node("target")
+    root   = _link(_node("root"), [early, target, _node("late")])
+    pruned = prune_to_node(Graph(roots=[root]), target.id)
+    assert [n.name for n in traverse(pruned)] == ["root", "early", "early_child", "target"]
+
+
+def test_prune_drops_the_targets_own_subtree():
+    target = _link(_node("target"), [_node("child")])
+    root   = _link(_node("root"), [target])
+    pruned = prune_to_node(Graph(roots=[root]), target.id)
+    assert [n.name for n in traverse(pruned)] == ["root", "target"]
+
+
+def test_prune_target_is_a_root():
+    root   = _link(_node("root"), [_node("child")])
+    pruned = prune_to_node(Graph(roots=[root]), root.id)
+    assert [n.name for n in traverse(pruned)] == ["root"]
+
+
+def test_prune_keeps_global_variables_and_metadata():
+    node  = _node("only")
+    graph = Graph(
+        roots=[node], variables=[Variable(name="ENV", value="prod")],
+        notes="hello", created_at="2026-01-01", updated_at="2026-01-02",
+    )
+    pruned = prune_to_node(graph, node.id)
+    assert [v.name for v in pruned.variables] == ["ENV"]
+    assert pruned.notes == "hello"
+    assert (pruned.created_at, pruned.updated_at) == ("2026-01-01", "2026-01-02")
+
+
+def test_prune_does_not_mutate_the_input_graph():
+    target = _link(_node("target"), [_node("child")])
+    root   = _link(_node("root"), [target, _node("late")])
+    graph  = Graph(roots=[root])
+    prune_to_node(graph, target.id)
+    assert [n.name for n in traverse(graph)] == ["root", "target", "child", "late"]
+    assert graph.roots[0].children[0].parent is graph.roots[0]
+
+
+def test_prune_rebuilds_parent_links_on_the_copies():
+    target = _node("target")
+    root   = _link(_node("root"), [target])
+    pruned = prune_to_node(Graph(roots=[root]), target.id)
+    copied_root = pruned.roots[0]
+    assert copied_root is not root
+    assert copied_root.children[0].parent is copied_root
+
+
+def test_prune_unknown_node_id_raises():
+    with pytest.raises(ValueError):
+        prune_to_node(Graph(roots=[_node("root")]), "no-such-id")
+
+
+def test_prune_empty_graph_raises():
+    with pytest.raises(ValueError):
+        prune_to_node(Graph(), "no-such-id")
 
 
 def test_generate_bash_script_empty_graph_has_only_shebang_and_flow_line():
@@ -1138,6 +1215,84 @@ def test_generated_loop_script_passes_bash_syntax_check(tmp_path):
     flow_path = tmp_path / "demo.flow"
     write_bash_script(graph, flow_path)
 
+    result = subprocess.run(
+        ["bash", "-n", str(flow_path.with_suffix(".sh"))],
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_partial_script_inside_a_then_branch_closes_fi():
+    target = _node("target")
+    cond   = _link(_if_node("check", "-f /tmp/x"), [target, _node("other")])
+    script = generate_bash_script(prune_to_node(Graph(roots=[cond]), target.id), "demo.flow")
+    assert "if [ -f /tmp/x ]; then" in script
+    assert "FL_NODE_NAME='target'" in script
+    assert "FL_NODE_NAME='other'" not in script
+    assert "else" not in script
+    assert script.rstrip().endswith("fi")
+
+
+def test_partial_script_inside_an_else_branch_keeps_the_then_branch():
+    target = _node("target")
+    cond   = _link(_if_node("check", "-f /tmp/x"), [_node("then_node"), target])
+    script = generate_bash_script(prune_to_node(Graph(roots=[cond]), target.id), "demo.flow")
+    assert "FL_NODE_NAME='then_node'" in script
+    assert "else" in script
+    assert "FL_NODE_NAME='target'" in script
+    assert script.rstrip().endswith("fi")
+
+
+def test_partial_script_inside_a_loop_closes_done():
+    target = _node("target")
+    loop   = _link(
+        _loop_node("iter", {"index": "i", "mode": "range", "start": 0, "end": 2}),
+        [target, _node("after")],
+    )
+    script = generate_bash_script(prune_to_node(Graph(roots=[loop]), target.id), "demo.flow")
+    assert "for ((i=0; i<=2; i+=1)); do" in script
+    assert "FL_NODE_NAME='target'" in script
+    assert "FL_NODE_NAME='after'" not in script
+    assert script.rstrip().endswith("done")
+
+
+def test_partial_script_on_a_data_node_emits_only_its_common_block():
+    data = Node(
+        id=str(uuid.uuid4()), name="payload", type=NodeType.DATA,
+        type_data={"command": "cat", "content": "x"},
+    )
+    script = generate_bash_script(prune_to_node(Graph(roots=[data]), data.id), "demo.flow")
+    assert script.endswith("FL_NODE_NAME='payload'\necho Executing ${FL_NODE_NAME}\n")
+    assert "cat" not in script
+
+
+def test_partial_script_keeps_global_variables():
+    target = _node("target")
+    graph  = Graph(roots=[target], variables=[Variable(name="ENV", value="prod")])
+    script = generate_bash_script(prune_to_node(graph, target.id), "demo.flow")
+    assert "ENV='prod'" in script
+    assert "export ENV" in script
+
+
+def test_partial_script_on_the_last_node_matches_the_full_script():
+    last  = _node("last")
+    root  = _link(_node("root"), [_link(_node("mid"), [last])])
+    graph = Graph(roots=[root])
+    assert (
+        generate_bash_script(prune_to_node(graph, last.id), "demo.flow")
+        == generate_bash_script(graph, "demo.flow")
+    )
+
+
+def test_partial_script_nested_in_a_loop_and_an_if_is_valid_bash(tmp_path):
+    target = _script_node("target", "bash", "echo hi")
+    cond   = _link(_if_node("check", "-d /tmp"), [target, _node("tail")])
+    loop   = _link(
+        _loop_node("iter", {"index": "i", "mode": "range", "start": 0, "end": 1}),
+        [cond],
+    )
+    flow_path = tmp_path / "demo.flow"
+    write_bash_script(prune_to_node(Graph(roots=[loop]), target.id), flow_path)
     result = subprocess.run(
         ["bash", "-n", str(flow_path.with_suffix(".sh"))],
         capture_output=True, text=True,
