@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt, Signal, QPoint, QPointF, QRectF
 from flower.models.graph import Graph
 from flower.models.node import Node, NodeType, MAX_CHILDREN
 from flower.layout.tree_layout import compute_layout, NodePos, node_label
-from flower.ui.node_item import NodeItem, NodeItemSignals, NODE_HEIGHT, _TYPE_COLORS
+from flower.ui.node_item import NodeItem, NodeItemSignals, NodeZone, NODE_HEIGHT, _TYPE_COLORS
 from flower.ui.edge_item import EdgeItem
 from flower.ui.theme import is_dark
 
@@ -153,6 +153,7 @@ def _create_drag_pixmap_from_layout(drag_node: Node, items: dict, dark: bool) ->
 class GraphCanvas(QGraphicsView):
     node_selected       = Signal(str)  # node_id
     node_edit_requested = Signal(str)  # node_id
+    node_exec_requested = Signal(str)  # node_id
     add_child_requested = Signal()
     delete_requested    = Signal()
     node_active_changed = Signal()     # graph mutated, mark dirty
@@ -190,6 +191,9 @@ class GraphCanvas(QGraphicsView):
         )
         self._signals.collapsed_toggled.connect(
             self._on_collapsed_toggled, Qt.ConnectionType.QueuedConnection
+        )
+        self._signals.exec_requested.connect(
+            self._on_exec_requested, Qt.ConnectionType.QueuedConnection
         )
 
     def _apply_canvas_theme(self, *_args) -> None:
@@ -290,6 +294,12 @@ class GraphCanvas(QGraphicsView):
             self.select_node(prev_selected)
         self.node_active_changed.emit()
 
+    def _on_exec_requested(self, node_id: str) -> None:
+        """Queued, like the other item-driven handlers: the receiver may open a
+        modal dialog and start a process, which must not happen while the
+        item's own mouse event is still on the stack."""
+        self.node_exec_requested.emit(node_id)
+
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.MiddleButton:
             self._pan_start = event.position().toPoint()
@@ -297,14 +307,8 @@ class GraphCanvas(QGraphicsView):
             event.accept()
             return
         if event.button() == Qt.MouseButton.LeftButton:
-            sp = self.mapToScene(event.position().toPoint())
-            item = self._item_at(sp)
-            if item:
-                local_x = item.mapFromScene(sp).x()
-                w = item.boundingRect().width()
-                if 20 <= local_x <= w - 28:
-                    self._drag_candidate_id = item.node_id
-                    self._drag_start_view   = event.position().toPoint()
+            view_pos = event.position().toPoint()
+            self._arm_drag_candidate(self.mapToScene(view_pos), view_pos)
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event) -> None:
@@ -364,6 +368,17 @@ class GraphCanvas(QGraphicsView):
         super().mouseReleaseEvent(event)
 
     # ── Drag-to-reparent ────────────────────────────────────────────────────
+
+    def _arm_drag_candidate(self, scene_pos: QPointF, view_pos: QPoint) -> None:
+        """Remember the node a left press could start dragging. A press on one
+        of the node's buttons must not arm a reparent drag, so the decision
+        goes through NodeItem.zone_at()."""
+        item = self._item_at(scene_pos)
+        if item is None:
+            return
+        if item.zone_at(item.mapFromScene(scene_pos).x()) == NodeZone.BODY:
+            self._drag_candidate_id = item.node_id
+            self._drag_start_view   = view_pos
 
     def _item_at(self, scene_pos: QPointF) -> NodeItem | None:
         for item in self._scene.items(scene_pos):

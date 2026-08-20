@@ -85,3 +85,48 @@ def test_drop_allowed_when_target_if_node_has_one_child(qapp):
 
     assert drag in target.children
     assert not received
+
+
+from PySide6.QtCore import QPoint
+
+
+def _executable_node(name="build"):
+    return Node(
+        id=str(uuid.uuid4()), name=name, type=NodeType.SCRIPT,
+        type_data={"language": "sh", "body": ""}, is_executable=True,
+    )
+
+
+def test_canvas_relays_node_exec_requested(qapp):
+    node   = _executable_node()
+    canvas = GraphCanvas()
+    canvas.load_graph(Graph(roots=[node]))
+    received = []
+    canvas.node_exec_requested.connect(received.append)
+    canvas._signals.exec_requested.emit(node.id)
+    # The connection is queued on purpose, so delivery needs one event loop
+    # turn: the receiver may open a modal dialog and start a process.
+    qapp.processEvents()
+    assert received == [node.id]
+
+
+def test_press_on_the_exec_pill_does_not_arm_a_drag(qapp):
+    node   = _executable_node()
+    canvas = GraphCanvas()
+    canvas.load_graph(Graph(roots=[node]))
+    rect = canvas._items[node.id].sceneBoundingRect()
+    canvas._arm_drag_candidate(
+        QPointF(rect.right() - 28.0, rect.center().y()), QPoint(0, 0)
+    )
+    assert canvas._drag_candidate_id is None
+
+
+def test_press_on_the_node_body_still_arms_a_drag(qapp):
+    node   = _executable_node()
+    canvas = GraphCanvas()
+    canvas.load_graph(Graph(roots=[node]))
+    rect = canvas._items[node.id].sceneBoundingRect()
+    canvas._arm_drag_candidate(
+        QPointF(rect.left() + 60.0, rect.center().y()), QPoint(0, 0)
+    )
+    assert canvas._drag_candidate_id == node.id
