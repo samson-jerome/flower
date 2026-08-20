@@ -94,3 +94,23 @@ def test_exec_node_ignores_an_unknown_id(qapp, tmp_path, monkeypatch):
     win._exec_node("no-such-id")
 
     assert launched == []
+
+
+def test_canvas_exec_signal_reaches_exec_node(qapp, tmp_path, monkeypatch):
+    node = _script_node("build", executable=True)
+    win, launched = _window(Graph(roots=[node]), tmp_path / "demo.flow", monkeypatch)
+
+    win._canvas.node_exec_requested.emit(node.id)
+    qapp.processEvents()  # the signal chain behind node_exec_requested is queued
+
+    assert len(launched) == 1
+
+
+def test_editor_exec_button_reaches_exec_node(qapp, tmp_path, monkeypatch):
+    node = _script_node("build", executable=True)
+    win, launched = _window(Graph(roots=[node]), tmp_path / "demo.flow", monkeypatch)
+
+    win._open_editor(node.id)
+    win._editor_windows[node.id]._exec_btn.click()
+
+    assert len(launched) == 1

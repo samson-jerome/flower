@@ -104,6 +104,12 @@ def test_canvas_relays_node_exec_requested(qapp):
     received = []
     canvas.node_exec_requested.connect(received.append)
     canvas._signals.exec_requested.emit(node.id)
+    # Nothing must arrive synchronously: the receiver opens a modal dialog and
+    # starts a process, which must not happen while the graphics item's mouse
+    # event is still on the stack. This assertion is what would catch a
+    # future refactor to a direct connection -- a direct connection would
+    # already have delivered by this point.
+    assert received == []
     # The connection is queued on purpose, so delivery needs one event loop
     # turn: the receiver may open a modal dialog and start a process.
     qapp.processEvents()
