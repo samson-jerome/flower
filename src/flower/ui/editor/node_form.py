@@ -154,7 +154,7 @@ class NodeForm(QWidget):
             editor.set_data(self._node.type_data)
         self._stack.setCurrentWidget(editor)
 
-    def _exec_state(self) -> bool:
+    def exec_state(self) -> bool:
         """Whether the Exec affordance should be live for the values currently
         in the form -- not for those in the node, which only receives them on
         apply."""
@@ -165,7 +165,7 @@ class NodeForm(QWidget):
         )
 
     def _emit_exec_state(self, *_args) -> None:
-        self.exec_state_changed.emit(self._exec_state())
+        self.exec_state_changed.emit(self.exec_state())
 
     def _refresh_executable_row(self, ntype: NodeType) -> None:
         """Only script and data nodes can be run up to, so for any other type

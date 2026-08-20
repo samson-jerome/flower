@@ -73,6 +73,20 @@ def test_exec_node_ignores_an_inactive_node(qapp, tmp_path, monkeypatch):
     assert list(tmp_path.iterdir()) == []
 
 
+def test_exec_node_ignores_an_active_node_under_an_inactive_ancestor(qapp, tmp_path, monkeypatch):
+    # Not reachable through canvas._on_active_toggled() (which repairs the
+    # subtree), but NodeForm.apply_to_node() can write is_active directly.
+    target = _link(_script_node("target", executable=True), [])
+    root   = _link(_script_node("root", active=False), [target])
+    win, launched = _window(Graph(roots=[root]), tmp_path / "demo.flow", monkeypatch)
+
+    win._exec_node(target.id)
+
+    assert launched == []
+    assert list(tmp_path.iterdir()) == []
+    assert win.statusBar().currentMessage() == "Un nœud parent est inactif : rien à exécuter."
+
+
 def test_exec_node_ignores_an_unknown_id(qapp, tmp_path, monkeypatch):
     node = _script_node("build", executable=True)
     win, launched = _window(Graph(roots=[node]), tmp_path / "demo.flow", monkeypatch)

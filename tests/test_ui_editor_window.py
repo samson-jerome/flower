@@ -89,6 +89,26 @@ def test_exec_button_follows_the_form_checkbox(qapp):
     assert win._exec_btn.isEnabled() is False
 
 
+def test_exec_button_seeded_from_a_form_with_unapplied_uncheck(qapp):
+    # The form's box was unchecked but never applied to the node, so the node
+    # itself is still executable: the button must follow the form, not it.
+    node = _script_node(executable=True)
+    form = NodeForm(node)
+    form._executable.setChecked(False)
+    win = EditorWindow(node, form=form)
+    assert win._exec_btn.isEnabled() is False
+
+
+def test_exec_button_seeded_from_a_form_with_unapplied_check(qapp):
+    # Mirror case: the form's box was checked but never applied, so the node
+    # itself is not executable, yet the button must be enabled.
+    node = _script_node(executable=False)
+    form = NodeForm(node)
+    form._executable.setChecked(True)
+    win = EditorWindow(node, form=form)
+    assert win._exec_btn.isEnabled() is True
+
+
 def test_exec_button_applies_the_form_before_emitting(qapp):
     node = _script_node()
     win  = EditorWindow(node)

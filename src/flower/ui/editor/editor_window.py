@@ -1,7 +1,7 @@
 from __future__ import annotations
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton
 from PySide6.QtCore import Signal
-from flower.models.node import Node, can_exec
+from flower.models.node import Node
 from flower.ui.editor.node_form import NodeForm
 
 
@@ -25,7 +25,7 @@ class EditorWindow(QDialog):
         self._dock_btn = QPushButton("Dock")
         self._exec_btn = QPushButton("Exec")
         self._exec_btn.setToolTip("Générer et exécuter le script jusqu'à ce nœud")
-        self._exec_btn.setEnabled(can_exec(node) and node.is_active)
+        self._exec_btn.setEnabled(self._form.exec_state())
 
         cancel_btn.clicked.connect(self.reject)
         apply_btn.clicked.connect(self._apply)

@@ -252,6 +252,18 @@ class MainWindow(QMainWindow):
         node = self._canvas._find_node(node_id)
         if node is None or not can_exec(node) or not node.is_active:
             return
+        # NodeForm.apply_to_node() writes is_active straight into the node
+        # with no ancestor repair (unlike canvas._on_active_toggled()), so an
+        # active node under an inactive ancestor is reachable from the editor.
+        # The generator drops the whole subtree at an inactive ancestor, so
+        # without this guard the script would hold nothing but boilerplate
+        # while the status bar reports success.
+        ancestor = node.parent
+        while ancestor is not None:
+            if not ancestor.is_active:
+                self.statusBar().showMessage("Un nœud parent est inactif : rien à exécuter.", 3000)
+                return
+            ancestor = ancestor.parent
         if self._path is None:
             self._save_as()
             if self._path is None:  # user cancelled the save dialog
