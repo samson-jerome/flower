@@ -103,3 +103,84 @@ def test_type_change_to_if_allowed_with_no_children(qapp, monkeypatch):
 
     assert not warned
     assert form._type_combo.currentData() == NodeType.IF
+
+
+def _data_node():
+    return Node(
+        id=str(uuid.uuid4()), name="payload", type=NodeType.DATA,
+        type_data={"command": "cat", "content": "x"},
+    )
+
+
+def test_executable_row_is_enabled_for_a_script_node(qapp):
+    form = NodeForm(_make_node())
+    assert form._executable.isEnabled() is True
+    assert form._executable.isChecked() is False
+
+
+def test_executable_row_is_enabled_for_a_data_node(qapp):
+    form = NodeForm(_data_node())
+    assert form._executable.isEnabled() is True
+
+
+def test_executable_row_is_disabled_for_a_noop_node(qapp):
+    node = Node(id=str(uuid.uuid4()), name="step", type=NodeType.NOOP)
+    form = NodeForm(node)
+    assert form._executable.isEnabled() is False
+
+
+def test_executable_row_reflects_the_node_flag(qapp):
+    node = _make_node()
+    node.is_executable = True
+    assert NodeForm(node)._executable.isChecked() is True
+
+
+def test_get_node_data_carries_the_executable_flag(qapp):
+    form = NodeForm(_make_node())
+    form._executable.setChecked(True)
+    assert form.get_node_data()["is_executable"] is True
+
+
+def test_apply_to_node_writes_the_executable_flag(qapp):
+    node = _make_node()
+    form = NodeForm(node)
+    form._executable.setChecked(True)
+    assert form.apply_to_node().is_executable is True
+
+
+def test_switching_to_an_ineligible_type_clears_the_executable_flag(qapp):
+    node = _make_node()
+    node.is_executable = True
+    form = NodeForm(node)
+    form._type_combo.setCurrentText(NodeType.IF.value)
+    assert form._executable.isChecked() is False
+    assert form._executable.isEnabled() is False
+    assert form.get_node_data()["is_executable"] is False
+
+
+def test_exec_state_changed_follows_the_executable_checkbox(qapp):
+    form = NodeForm(_make_node())
+    received = []
+    form.exec_state_changed.connect(received.append)
+    form._executable.setChecked(True)
+    assert received == [True]
+    form._executable.setChecked(False)
+    assert received == [True, False]
+
+
+def test_exec_state_changed_follows_the_active_checkbox(qapp):
+    form = NodeForm(_make_node())
+    form._executable.setChecked(True)
+    received = []
+    form.exec_state_changed.connect(received.append)
+    form._active.setChecked(False)
+    assert received == [False]
+
+
+def test_exec_state_changed_follows_the_type_combo(qapp):
+    form = NodeForm(_make_node())
+    form._executable.setChecked(True)
+    received = []
+    form.exec_state_changed.connect(received.append)
+    form._type_combo.setCurrentText(NodeType.LOOP.value)
+    assert received[-1] is False
