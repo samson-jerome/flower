@@ -84,6 +84,17 @@ class NodeItem(QGraphicsItem):
         return QRectF(right - EXEC_BTN_W, (NODE_HEIGHT - EXEC_BTN_H) / 2,
                       EXEC_BTN_W, EXEC_BTN_H)
 
+    def _label_rect(self) -> QRectF:
+        """Geometry of the label text, leaving a 6px gap before whichever
+        button zone (collapse and/or exec pill) is present on the right, or
+        the plain right padding when neither is. Shared by paint() and the
+        tests so the drawn gap and the asserted gap cannot drift apart."""
+        n = len(self._node.children)
+        btn_w = COLLAPSE_ZONE_W if n > 0 else RIGHT_PAD
+        if self._exec_rect() is not None:
+            btn_w += EXEC_ZONE_W
+        return QRectF(ACTIVE_ZONE_W, 0, self._pos.width - ACTIVE_ZONE_W - btn_w, NODE_HEIGHT)
+
     def zone_at(self, x: float) -> NodeZone:
         """Which interactive zone the node-local x falls into. Single source of
         truth for this item's own mouse handling and for GraphCanvas's
@@ -132,15 +143,12 @@ class NodeItem(QGraphicsItem):
             painter.setOpacity(0.5)
 
         n = len(self._node.children)
-        btn_w = COLLAPSE_ZONE_W if n > 0 else 0.0  # zone réservée aux boutons
         exec_rect = self._exec_rect()
-        if exec_rect is not None:
-            btn_w += EXEC_ZONE_W
 
         # Label
         painter.setPen(QPen(accent))
         painter.drawText(
-            QRectF(ACTIVE_ZONE_W, 0, self._pos.width - ACTIVE_ZONE_W - btn_w, NODE_HEIGHT),
+            self._label_rect(),
             Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
             node_label(self._node),
         )

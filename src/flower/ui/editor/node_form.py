@@ -143,6 +143,10 @@ class NodeForm(QWidget):
             # was just refused, with an eligible type showing in the combo.
             self._refresh_executable_row(self._node.type)
             self._emit_exec_state()
+            # Restore the visible editor without going through
+            # _refresh_type_editor(), which would call set_data() and
+            # overwrite the user's unapplied edits with the node's own data.
+            self._stack.setCurrentWidget(self._type_editors[self._node.type])
             return
         self._refresh_type_editor(ntype)
         self._refresh_executable_row(ntype)
@@ -169,10 +173,12 @@ class NodeForm(QWidget):
 
     def _refresh_executable_row(self, ntype: NodeType) -> None:
         """Only script and data nodes can be run up to, so for any other type
-        the row is cleared and disabled and the flag cannot be set."""
+        the row is disabled and the flag does not apply -- but it is left
+        checked so a round trip through an ineligible type (e.g. script ->
+        noop -> script, all before Appliquer) does not silently drop the
+        user's pending choice. get_node_data() and exec_state() already gate
+        on the type, so persistence is unaffected."""
         eligible = ntype in EXECUTABLE_TYPES
-        if not eligible:
-            self._executable.setChecked(False)
         self._executable.setEnabled(eligible)
         label = self._form_layout.labelForField(self._executable)
         if label:

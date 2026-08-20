@@ -2,7 +2,7 @@ import uuid
 from PySide6.QtWidgets import QGraphicsSceneMouseEvent
 from PySide6.QtCore import QEvent, QPointF, Qt
 from flower.models.node import Node, NodeType
-from flower.layout.tree_layout import NodePos
+from flower.layout.tree_layout import NodePos, EXEC_BTN_W, EXEC_ZONE_W
 from flower.ui.node_item import NodeItem, NodeItemSignals, NodeZone, NODE_HEIGHT
 from flower.ui.edge_item import EdgeItem
 
@@ -131,6 +131,18 @@ def test_press_on_the_body_still_selects(qapp):
     signals.selected.connect(received.append)
     item.mousePressEvent(_mouse_event(QEvent.Type.GraphicsSceneMousePress, 100.0))
     assert received == [node.id]
+
+
+def test_label_leaves_the_same_gap_before_the_pill_with_and_without_children(qapp):
+    without_children, _, _ = _exec_item(children=0)
+    with_children, _, _    = _exec_item(children=1)
+
+    gap_without = without_children._exec_rect().left() - without_children._label_rect().right()
+    gap_with    = with_children._exec_rect().left() - with_children._label_rect().right()
+    expected_gap = EXEC_ZONE_W - EXEC_BTN_W  # the margin reserved after the pill itself
+
+    assert gap_without == expected_gap
+    assert gap_with == expected_gap
 
 
 def test_press_on_the_activity_dot_still_toggles(qapp):

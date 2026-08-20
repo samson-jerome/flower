@@ -148,14 +148,26 @@ def test_apply_to_node_writes_the_executable_flag(qapp):
     assert form.apply_to_node().is_executable is True
 
 
-def test_switching_to_an_ineligible_type_clears_the_executable_flag(qapp):
+def test_switching_to_an_ineligible_type_disables_the_executable_row(qapp):
     node = _make_node()
     node.is_executable = True
     form = NodeForm(node)
     form._type_combo.setCurrentText(NodeType.IF.value)
-    assert form._executable.isChecked() is False
     assert form._executable.isEnabled() is False
     assert form.get_node_data()["is_executable"] is False
+
+
+def test_a_round_trip_through_an_ineligible_type_keeps_the_checked_flag(qapp):
+    node = _make_node()
+    form = NodeForm(node)
+    form._executable.setChecked(True)
+
+    form._type_combo.setCurrentText(NodeType.NOOP.value)
+    form._type_combo.setCurrentText(NodeType.SCRIPT.value)
+
+    assert form._executable.isChecked() is True
+    assert form._executable.isEnabled() is True
+    assert form.get_node_data()["is_executable"] is True
 
 
 def test_exec_state_changed_follows_the_executable_checkbox(qapp):
@@ -204,11 +216,32 @@ def test_executable_row_resyncs_after_a_refused_type_change(qapp, monkeypatch):
     assert form._executable.isEnabled() is False
 
     # Step 2: switch to "if" -- refused because of the 3 children, combo reverts
-    # to "script". The row must follow the reverted type, not stay stale.
+    # to "script". The row must follow the reverted type, not stay stale. The
+    # checkbox itself was never cleared by the ineligible NOOP step, so once
+    # back on "script" (active, executable) the exec state is live again.
     received = []
     form.exec_state_changed.connect(received.append)
     form._type_combo.setCurrentText(NodeType.IF.value)
 
     assert form._type_combo.currentData() == NodeType.SCRIPT
     assert form._executable.isEnabled() is True
-    assert received[-1] is False
+    assert received[-1] is True
+
+
+def test_refused_type_change_restores_the_visible_editor(qapp, monkeypatch):
+    node = Node(
+        id=str(uuid.uuid4()), name="build", type=NodeType.SCRIPT,
+        type_data={"language": "bash", "body": "make build"},
+    )
+    for i in range(3):
+        child = Node(id=str(uuid.uuid4()), name=f"child{i}", type=NodeType.NOOP)
+        child.parent = node
+        node.children.append(child)
+    form = NodeForm(node)
+    monkeypatch.setattr(QMessageBox, "warning", staticmethod(lambda *a, **k: None))
+
+    # Refused because of the 3 children -- the combo reverts to "script", and
+    # the stack must show the script editor again, not the refused "if" one.
+    form._type_combo.setCurrentText(NodeType.IF.value)
+
+    assert form._stack.currentWidget() is form._type_editors[NodeType.SCRIPT]
