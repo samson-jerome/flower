@@ -30,6 +30,7 @@ def _read_node(el, parent: Node | None = None) -> Node:
         type=ntype,
         is_active=el.get("active", "1") == "1",
         is_collapsed=el.get("collapsed", "0") == "1",
+        is_executable=el.get("executable", "0") == "1",
         description=el.findtext("description", "") or "",
         notes=el.findtext("notes", "") or "",
         variables=_read_vars(el),

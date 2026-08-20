@@ -1,4 +1,6 @@
-from flower.models.node import Variable, VariableOperation, NodeType, Node
+from flower.models.node import (
+    Variable, VariableOperation, NodeType, Node, EXECUTABLE_TYPES, can_exec,
+)
 from flower.models.graph import Graph
 
 
@@ -59,3 +61,28 @@ def test_max_children_has_no_limit_for_other_types():
     assert MAX_CHILDREN.get(NodeType.SCRIPT) is None
     assert MAX_CHILDREN.get(NodeType.DATA) is None
     assert MAX_CHILDREN.get(NodeType.LOOP) is None
+
+
+def test_node_is_not_executable_by_default():
+    assert Node(id="n1", name="build", type=NodeType.SCRIPT).is_executable is False
+
+
+def test_executable_types_are_script_and_data():
+    assert EXECUTABLE_TYPES == frozenset({NodeType.SCRIPT, NodeType.DATA})
+
+
+def test_can_exec_true_for_a_marked_script_or_data_node():
+    for ntype in (NodeType.SCRIPT, NodeType.DATA):
+        node = Node(id="n1", name="x", type=ntype, is_executable=True)
+        assert can_exec(node) is True
+
+
+def test_can_exec_false_for_a_marked_noop_if_or_loop_node():
+    for ntype in (NodeType.NOOP, NodeType.IF, NodeType.LOOP):
+        node = Node(id="n1", name="x", type=ntype, is_executable=True)
+        assert can_exec(node) is False
+
+
+def test_can_exec_false_for_any_unmarked_node():
+    for ntype in NodeType:
+        assert can_exec(Node(id="n1", name="x", type=ntype)) is False

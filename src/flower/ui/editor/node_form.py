@@ -4,8 +4,8 @@ from PySide6.QtWidgets import (
     QLineEdit, QCheckBox, QComboBox, QStackedWidget, QSplitter, QScrollArea,
     QApplication, QMessageBox,
 )
-from PySide6.QtCore import Qt
-from flower.models.node import Node, NodeType, MAX_CHILDREN
+from PySide6.QtCore import Qt, Signal
+from flower.models.node import Node, NodeType, MAX_CHILDREN, EXECUTABLE_TYPES
 from flower.ui.editor.type_editors import make_type_editor
 from flower.ui.vars_panel import VarsPanel
 from flower.ui.notes_panel import NotesPanel, bind_notes_to_splitter
@@ -29,6 +29,8 @@ class NodeForm(QWidget):
     description, variables (toutes deux indépendantes du type de nœud),
     puis le corps du nœud (type, nom, actif et l'éditeur spécifique au type).
     """
+
+    exec_state_changed = Signal(bool)
 
     def __init__(self, node: Node, parent=None):
         super().__init__(parent)
@@ -56,6 +58,8 @@ class NodeForm(QWidget):
         self._name   = QLineEdit(node.name)
         self._active = QCheckBox()
         self._active.setChecked(node.is_active)
+        self._executable = QCheckBox()
+        self._executable.setChecked(node.is_executable)
 
         self._stack: QStackedWidget = QStackedWidget()
         self._type_editors: dict[NodeType, QWidget] = {}
@@ -72,6 +76,10 @@ class NodeForm(QWidget):
         form.addRow("Type:", self._type_combo)
         form.addRow("Nom:", self._name)
         form.addRow("Actif:", self._active)
+        form.addRow("Exécutable:", self._executable)
+        self._refresh_executable_row(node.type)
+        self._executable.toggled.connect(self._emit_exec_state)
+        self._active.toggled.connect(self._emit_exec_state)
 
         body = QWidget()
         body_layout = QVBoxLayout(body)
@@ -130,8 +138,19 @@ class NodeForm(QWidget):
             blocked = self._type_combo.blockSignals(True)
             self._type_combo.setCurrentText(self._node.type.value)
             self._type_combo.blockSignals(blocked)
+            # The combo is back on the node's own type, so the executable row
+            # has to follow it: otherwise it stays disabled from the type that
+            # was just refused, with an eligible type showing in the combo.
+            self._refresh_executable_row(self._node.type)
+            self._emit_exec_state()
+            # Restore the visible editor without going through
+            # _refresh_type_editor(), which would call set_data() and
+            # overwrite the user's unapplied edits with the node's own data.
+            self._stack.setCurrentWidget(self._type_editors[self._node.type])
             return
         self._refresh_type_editor(ntype)
+        self._refresh_executable_row(ntype)
+        self._emit_exec_state()
 
     def _refresh_type_editor(self, ntype: NodeType) -> None:
         editor = self._type_editors[ntype]
@@ -139,23 +158,51 @@ class NodeForm(QWidget):
             editor.set_data(self._node.type_data)
         self._stack.setCurrentWidget(editor)
 
+    def exec_state(self) -> bool:
+        """Whether the Exec affordance should be live for the values currently
+        in the form -- not for those in the node, which only receives them on
+        apply."""
+        return (
+            self._executable.isChecked()
+            and NodeType(self._type_combo.currentData()) in EXECUTABLE_TYPES
+            and self._active.isChecked()
+        )
+
+    def _emit_exec_state(self, *_args) -> None:
+        self.exec_state_changed.emit(self.exec_state())
+
+    def _refresh_executable_row(self, ntype: NodeType) -> None:
+        """Only script and data nodes can be run up to, so for any other type
+        the row is disabled and the flag does not apply -- but it is left
+        checked so a round trip through an ineligible type (e.g. script ->
+        noop -> script, all before Appliquer) does not silently drop the
+        user's pending choice. get_node_data() and exec_state() already gate
+        on the type, so persistence is unaffected."""
+        eligible = ntype in EXECUTABLE_TYPES
+        self._executable.setEnabled(eligible)
+        label = self._form_layout.labelForField(self._executable)
+        if label:
+            label.setEnabled(eligible)
+
     def get_node_data(self) -> dict:
         ntype = NodeType(self._type_combo.currentData())
         return {
-            "name":        self._name.text(),
-            "type":        ntype,
-            "is_active":   self._active.isChecked(),
-            "description": self._description.text(),
-            "type_data":   self._type_editors[ntype].get_data(),
-            "variables":   self._vars.get_variables(),
+            "name":          self._name.text(),
+            "type":          ntype,
+            "is_active":     self._active.isChecked(),
+            "is_executable": self._executable.isChecked() and ntype in EXECUTABLE_TYPES,
+            "description":   self._description.text(),
+            "type_data":     self._type_editors[ntype].get_data(),
+            "variables":     self._vars.get_variables(),
         }
 
     def apply_to_node(self) -> Node:
         data = self.get_node_data()
-        self._node.name        = data["name"]
-        self._node.type        = data["type"]
-        self._node.is_active   = data["is_active"]
-        self._node.description = data["description"]
-        self._node.type_data   = data["type_data"]
-        self._node.variables   = data["variables"]
+        self._node.name          = data["name"]
+        self._node.type          = data["type"]
+        self._node.is_active     = data["is_active"]
+        self._node.is_executable = data["is_executable"]
+        self._node.description   = data["description"]
+        self._node.type_data     = data["type_data"]
+        self._node.variables     = data["variables"]
         return self._node

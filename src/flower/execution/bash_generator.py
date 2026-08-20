@@ -1,4 +1,5 @@
 from __future__ import annotations
+import re
 from pathlib import Path
 from flower.models.graph import Graph
 from flower.models.node import Node, NodeType, Variable, VariableOperation
@@ -190,13 +191,29 @@ def write_bash_script(
     )
 
 
+_LABEL_RE = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def _slug(label: str) -> str:
+    """Filename-safe form of a node name, capped so a long name cannot blow up
+    the path length. A node name is free text: separators, spaces and accented
+    characters all collapse to "_". Falls back to "node" when nothing
+    survives."""
+    return _LABEL_RE.sub("_", label).strip("_")[:40].strip("_") or "node"
+
+
 def write_timestamped_bash_script(
-    graph: Graph, flow_path: Path, timestamp: str, interpreters: dict[str, str] | None = None
+    graph: Graph, flow_path: Path, timestamp: str,
+    interpreters: dict[str, str] | None = None, label: str = "",
 ) -> Path:
-    """Same content as write_bash_script, written to <stem>_<timestamp>.sh
-    next to flow_path. Returns the path written, so the caller knows what
-    to execute. `timestamp` is injected by the caller (not computed here)
-    to keep this function deterministic and testable."""
-    script_path = flow_path.with_name(f"{flow_path.stem}_{timestamp}.sh")
+    """Same content as write_bash_script, written to
+    <stem>[_<label>]_<timestamp>.sh next to flow_path. Returns the path
+    written, so the caller knows what to execute. `timestamp` is injected by
+    the caller (not computed here) to keep this function deterministic and
+    testable. `label` names a partial run after its target node; it is
+    sanitized here rather than by the caller, since a node name is free
+    text."""
+    suffix = f"_{_slug(label)}" if label else ""
+    script_path = flow_path.with_name(f"{flow_path.stem}{suffix}_{timestamp}.sh")
     _write_script(generate_bash_script(graph, flow_path.name, interpreters), script_path)
     return script_path

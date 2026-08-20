@@ -17,6 +17,7 @@ def _node_to_xml(node: Node, parent_el) -> None:
         type=node.type, name=node.name,
         active="1" if node.is_active else "0",
         collapsed="1" if node.is_collapsed else "0",
+        executable="1" if node.is_executable else "0",
     )
     etree.SubElement(node_el, "description").text = node.description
     etree.SubElement(node_el, "notes").text = etree.CDATA(node.notes or "")
