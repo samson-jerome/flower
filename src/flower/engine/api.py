@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
+from flower.engine.dot import write_dot, write_dot_active
 from flower.engine.errors import CycleError, MaxChildrenError
 from flower.engine.execution.bash_generator import (
     generate_bash_script, write_bash_script, write_timestamped_bash_script,
@@ -69,6 +70,22 @@ class FlowGraph:
             raise
         self.path     = target
         self.is_dirty = False
+
+    def export_dot(self, path: Path | None = None) -> Path:
+        """Write the whole topology to `path`, or to <stem>.dot next to the
+        flow. Returns the path written."""
+        target = path if path is not None else self._require_path().with_suffix(".dot")
+        write_dot(self.graph, target)
+        return target
+
+    def export_dot_active(self, path: Path | None = None) -> Path:
+        """Same, for what a run would execute, defaulting to
+        <stem>_actifs.dot so it never overwrites the full export."""
+        if path is None:
+            flow_path = self._require_path()
+            path = flow_path.with_name(f"{flow_path.stem}_actifs.dot")
+        write_dot_active(self.graph, path)
+        return path
 
     # ── Access ──────────────────────────────────────────────────────────────
 

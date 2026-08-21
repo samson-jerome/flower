@@ -103,6 +103,9 @@ class MainWindow(QMainWindow):
         exec_menu = self.menuBar().addMenu("Exécution")
         exec_menu.addAction("Générer le script", self._generate_script)
         exec_menu.addAction("Lancer le script",  self._launch_script, "Alt+R")
+        exec_menu.addSeparator()
+        exec_menu.addAction("Exporter en .dot",             self._export_dot)
+        exec_menu.addAction("Exporter en .dot (actifs)",    self._export_dot_active)
 
     def _open_preferences(self) -> None:
         PreferencesDialog(self).exec()
@@ -206,6 +209,18 @@ class MainWindow(QMainWindow):
                 self, "Échec du lancement",
                 "Impossible d'ouvrir un terminal pour exécuter le script.",
             )
+
+    def _export_dot(self) -> None:
+        if not self._ensure_saved():
+            return
+        path = self._flow.export_dot()
+        self.statusBar().showMessage(f"Graphe exporté : {path.name}", 3000)
+
+    def _export_dot_active(self) -> None:
+        if not self._ensure_saved():
+            return
+        path = self._flow.export_dot_active()
+        self.statusBar().showMessage(f"Graphe exporté : {path.name}", 3000)
 
     def _ensure_saved(self) -> bool:
         """A script is written next to the .flow, so an unsaved flow has

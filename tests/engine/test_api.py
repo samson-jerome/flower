@@ -456,3 +456,37 @@ def test_run_from_an_unknown_node_raises(tmp_path):
     flow, first, second = _script_flow(tmp_path)
     with pytest.raises(ValueError):
         flow.run(from_node_id="absent")
+
+
+def test_export_dot_writes_next_to_the_flow(tmp_path):
+    flow, first, second = _script_flow(tmp_path)
+
+    path = flow.export_dot()
+
+    assert path == tmp_path / "demo.dot"
+    assert "digraph flow {" in path.read_text(encoding="utf-8")
+
+
+def test_export_dot_active_uses_its_own_file_name(tmp_path):
+    flow, first, second = _script_flow(tmp_path)
+    second.is_active = False
+
+    path = flow.export_dot_active()
+
+    assert path == tmp_path / "demo_actifs.dot"
+    assert "second" not in path.read_text(encoding="utf-8")
+
+
+def test_export_dot_accepts_an_explicit_path(tmp_path):
+    flow, first, second = _script_flow(tmp_path)
+    target = tmp_path / "ailleurs" / "graph.dot"
+    target.parent.mkdir()
+
+    assert flow.export_dot(target) == target
+    assert target.exists()
+
+
+def test_export_dot_on_an_unsaved_flow_raises():
+    flow = FlowGraph(Graph(roots=[_node("root")]))
+    with pytest.raises(ValueError):
+        flow.export_dot()
