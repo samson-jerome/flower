@@ -423,12 +423,13 @@ def test_run_writes_a_timestamped_script_and_launches_it(tmp_path, monkeypatch):
         lambda path, terminal: calls.append((path, terminal)) or True,
     )
 
-    assert flow.run(terminal="kitty") is True
+    result = flow.run(terminal="kitty")
 
     (path, terminal), = calls
     assert terminal == "kitty"
     assert path.exists()
     assert path.name.startswith("demo_")
+    assert result == path
 
 
 def test_run_defaults_to_the_default_terminal(tmp_path, monkeypatch):
@@ -448,7 +449,7 @@ def test_run_reports_a_failed_launch(tmp_path, monkeypatch):
     flow, first, second = _script_flow(tmp_path)
     monkeypatch.setattr("flower.engine.api.run_script", lambda path, terminal: False)
 
-    assert flow.run() is False
+    assert flow.run() is None
 
 
 def test_run_from_an_unknown_node_raises(tmp_path):

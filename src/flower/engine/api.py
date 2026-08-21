@@ -278,8 +278,11 @@ class FlowGraph:
         stamp = timestamp if timestamp is not None else datetime.now().strftime("%Y%m%d-%H%M%S")
         return write_timestamped_bash_script(graph, path, stamp, interpreters, label)
 
-    def run(self, from_node_id=None, interpreters=None, terminal=None) -> bool:
-        """Write the run script and open it in a terminal. Returns whether
-        the terminal started."""
+    def run(self, from_node_id=None, interpreters=None, terminal=None) -> Path | None:
+        """Write the run script and open it in a terminal. Returns the script
+        path when the terminal started, None when it could not -- callers name
+        the script in what they report to the user, and a script that was
+        written but never launched is not something to announce as running."""
         script_path = self.write_run_script(from_node_id, interpreters)
-        return run_script(script_path, terminal if terminal is not None else DEFAULT_TERMINAL)
+        started = run_script(script_path, terminal if terminal is not None else DEFAULT_TERMINAL)
+        return script_path if started else None

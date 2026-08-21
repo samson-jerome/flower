@@ -192,8 +192,9 @@ class MainWindow(QMainWindow):
     def _launch_script(self) -> None:
         if not self._ensure_saved():
             return
-        if self._flow.run(interpreters=load_interpreters()):
-            self.statusBar().showMessage("Script lancé", 3000)
+        path = self._flow.run(interpreters=load_interpreters())
+        if path is not None:
+            self.statusBar().showMessage(f"Script lancé : {path.name}", 3000)
         else:
             QMessageBox.warning(
                 self, "Échec du lancement",
@@ -230,8 +231,9 @@ class MainWindow(QMainWindow):
             ancestor = ancestor.parent
         if not self._ensure_saved():
             return
-        if self._flow.run(node_id, interpreters=load_interpreters()):
-            self.statusBar().showMessage("Exécution partielle lancée", 3000)
+        path = self._flow.run(node_id, interpreters=load_interpreters())
+        if path is not None:
+            self.statusBar().showMessage(f"Exécution partielle : {path.name}", 3000)
         else:
             QMessageBox.warning(
                 self, "Échec du lancement",
@@ -242,6 +244,8 @@ class MainWindow(QMainWindow):
 
     def _add_child_node(self) -> None:
         parent_id = self._canvas.selected_id
+        if parent_id is not None and self._flow.find(parent_id) is None:
+            parent_id = None
         try:
             self._flow.add_node(parent_id)
         except GraphRuleError as error:

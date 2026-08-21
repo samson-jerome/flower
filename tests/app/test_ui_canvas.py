@@ -59,7 +59,28 @@ def test_drop_refused_when_target_if_node_already_has_two_children(qapp):
 
     assert target.children == [child_a, child_b]
     assert drag in flow.graph.roots
-    assert received
+    assert received == ["Un nœud « if » ne peut avoir plus de 2 enfant(s)."]
+
+
+def test_drop_onto_its_own_descendant_is_refused(qapp):
+    grandparent = _node("grandparent")
+    parent      = _node("parent")
+    child       = _node("child")
+    grandparent.children = [parent]
+    parent.parent = grandparent
+    parent.children = [child]
+    child.parent = parent
+
+    canvas, flow = _canvas(grandparent)
+    canvas._drag_node_id = grandparent.id
+    received = []
+    canvas.drop_rejected.connect(received.append)
+
+    canvas._perform_drop(canvas._items[child.id].sceneBoundingRect().center())
+
+    assert grandparent.children == [parent]
+    assert flow.graph.roots == [grandparent]
+    assert received == ["Un nœud ne peut pas devenir son propre descendant."]
 
 
 def test_drop_allowed_when_target_if_node_has_one_child(qapp):

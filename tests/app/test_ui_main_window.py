@@ -113,3 +113,20 @@ def test_editor_exec_button_reaches_exec_node(qapp, tmp_path, monkeypatch):
     win._editor_windows[node.id]._exec_btn.click()
 
     assert len(launched) == 1
+
+
+def test_add_child_node_falls_back_to_a_root_on_a_stale_selection(qapp, tmp_path, monkeypatch):
+    """_delete_selected_node() never clears canvas.selected_id, so the id it
+    leaves selected is stale as soon as the node is gone. Calling the method
+    directly (not through the add_child_requested signal) makes a regression
+    here fail outright instead of the ValueError from FlowGraph.add_node()
+    being swallowed somewhere upstream."""
+    node = _script_node("solo")
+    win, _ = _window(Graph(roots=[node]), tmp_path / "demo.flow", monkeypatch)
+    win._canvas.select_node(node.id)
+
+    win._delete_selected_node()
+    win._add_child_node()
+
+    assert len(win._flow.graph.roots) == 1
+    assert win._flow.graph.roots[0].parent is None
