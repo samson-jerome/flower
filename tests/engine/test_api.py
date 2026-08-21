@@ -1,6 +1,7 @@
 import uuid
 import pytest
 from flower.engine.api import FlowGraph
+from flower.engine.errors import CycleError, MaxChildrenError
 from flower.engine.models.graph import Graph
 from flower.engine.models.node import Node, NodeType
 
@@ -129,3 +130,195 @@ def test_unique_name_skips_taken_suffixes():
     flow = FlowGraph(Graph(roots=[root]))
 
     assert flow.unique_name("dup") == "dup_2"
+
+
+def test_add_node_appends_to_the_parent_and_marks_dirty():
+    flow, root, child, *_ = _tree()
+
+    added = flow.add_node(root.id, NodeType.SCRIPT)
+
+    assert added in root.children
+    assert added.parent is root
+    assert added.type == NodeType.SCRIPT
+    assert flow.is_dirty is True
+
+
+def test_add_node_without_a_parent_creates_a_root():
+    flow, root, *_ = _tree()
+
+    added = flow.add_node(None)
+
+    assert added in flow.graph.roots
+    assert added.parent is None
+
+
+def test_add_node_names_it_uniquely():
+    flow, root, *_ = _tree()
+
+    first  = flow.add_node(root.id, name="task")
+    second = flow.add_node(root.id, name="task")
+
+    assert first.name == "task"
+    assert second.name == "task_1"
+
+
+def test_add_node_gives_each_node_its_own_id():
+    flow, root, *_ = _tree()
+    ids = {flow.add_node(root.id).id for _ in range(3)}
+    assert len(ids) == 3
+
+
+def test_add_node_refuses_a_third_child_on_an_if_node():
+    parent = _node("check", NodeType.IF)
+    flow = FlowGraph(Graph(roots=[parent]))
+    flow.add_node(parent.id)
+    flow.add_node(parent.id)
+
+    with pytest.raises(MaxChildrenError) as excinfo:
+        flow.add_node(parent.id)
+
+    assert excinfo.value.max_children == 2
+    assert excinfo.value.node_type == NodeType.IF
+    assert len(parent.children) == 2
+
+
+def test_remove_node_detaches_it_from_its_parent():
+    flow, root, child, *_ = _tree()
+
+    flow.remove_node(child.id)
+
+    assert child not in root.children
+    assert flow.is_dirty is True
+
+
+def test_remove_node_detaches_a_root():
+    flow, root, *_ = _tree()
+
+    flow.remove_node(root.id)
+
+    assert root not in flow.graph.roots
+
+
+def test_reparent_moves_the_node_and_its_subtree():
+    flow, root, child, grandchild, other = _tree()
+
+    flow.reparent(child.id, other.id)
+
+    assert child not in root.children
+    assert child in other.children
+    assert child.parent is other
+    assert grandchild.parent is child          # the subtree follows
+    assert flow.is_dirty is True
+
+
+def test_reparent_to_none_makes_it_a_root():
+    flow, root, child, *_ = _tree()
+
+    flow.reparent(child.id, None)
+
+    assert child in flow.graph.roots
+    assert child.parent is None
+    assert child not in root.children
+
+
+def test_reparent_appends_last_by_default_and_honours_an_index():
+    flow, root, child, grandchild, other = _tree()
+    first = flow.add_node(other.id, name="first")
+
+    flow.reparent(child.id, other.id)
+    assert other.children == [first, child]
+
+    flow.reparent(child.id, other.id, index=0)
+    assert other.children == [child, first]
+
+
+def test_reparent_onto_itself_raises():
+    flow, root, child, *_ = _tree()
+    with pytest.raises(CycleError):
+        flow.reparent(child.id, child.id)
+
+
+def test_reparent_onto_its_own_descendant_raises():
+    flow, root, child, grandchild, _ = _tree()
+
+    with pytest.raises(CycleError):
+        flow.reparent(child.id, grandchild.id)
+
+    assert child in root.children          # unchanged
+
+
+def test_reparent_refuses_a_full_if_node():
+    flow, root, child, grandchild, other = _tree()
+    target = _node("check", NodeType.IF)
+    flow.graph.roots.append(target)
+    flow.add_node(target.id)
+    flow.add_node(target.id)
+
+    with pytest.raises(MaxChildrenError):
+        flow.reparent(child.id, target.id)
+
+    assert child in root.children
+
+
+def test_reorder_swaps_two_siblings():
+    flow, root, child, grandchild, other = _tree()
+
+    flow.reorder(other.id, -1)
+
+    assert flow.graph.roots == [other, root]
+    assert flow.is_dirty is True
+
+
+def test_reorder_at_the_edge_does_nothing_and_stays_clean():
+    flow, root, child, grandchild, other = _tree()
+
+    flow.reorder(root.id, -1)
+
+    assert flow.graph.roots == [root, other]
+    assert flow.is_dirty is False
+
+
+def test_rename_node():
+    flow, root, *_ = _tree()
+
+    flow.rename_node(root.id, "renamed")
+
+    assert root.name == "renamed"
+    assert flow.is_dirty is True
+
+
+def test_set_active_false_deactivates_the_whole_subtree():
+    flow, root, child, grandchild, _ = _tree()
+
+    flow.set_active(child.id, False)
+
+    assert (child.is_active, grandchild.is_active) == (False, False)
+    assert root.is_active is True
+    assert flow.is_dirty is True
+
+
+def test_set_active_true_reactivates_subtree_and_ancestors():
+    flow, root, child, grandchild, _ = _tree()
+    flow.set_active(root.id, False)
+
+    flow.set_active(child.id, True)
+
+    assert (root.is_active, child.is_active, grandchild.is_active) == (True, True, True)
+
+
+def test_set_collapsed_marks_dirty_since_it_is_persisted():
+    flow, root, *_ = _tree()
+
+    flow.set_collapsed(root.id, True)
+
+    assert root.is_collapsed is True
+    assert flow.is_dirty is True
+
+
+def test_set_executable():
+    flow, root, *_ = _tree()
+
+    flow.set_executable(root.id, True)
+
+    assert root.is_executable is True
+    assert flow.is_dirty is True
