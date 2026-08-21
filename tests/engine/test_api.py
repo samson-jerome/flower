@@ -2,6 +2,7 @@ import uuid
 import pytest
 from flower.engine.api import FlowGraph
 from flower.engine.errors import CycleError, MaxChildrenError
+from flower.engine.execution.runner import DEFAULT_TERMINAL
 from flower.engine.models.graph import Graph
 from flower.engine.models.node import Node, NodeType
 
@@ -20,6 +21,19 @@ def _tree():
     child.children.append(grandchild)
     grandchild.parent = child
     return FlowGraph(Graph(roots=[root, other])), root, child, grandchild, other
+
+
+def _script_flow(tmp_path):
+    """A two-node flow saved to disk, ready to generate a script from."""
+    first  = _node("first",  NodeType.SCRIPT)
+    second = _node("second", NodeType.SCRIPT)
+    first.type_data  = {"language": "", "body": "echo un"}
+    second.type_data = {"language": "", "body": "echo deux"}
+    first.children.append(second)
+    second.parent = first
+    flow = FlowGraph(Graph(roots=[first]))
+    flow.save(tmp_path / "demo.flow")
+    return flow, first, second
 
 
 def test_new_starts_on_an_empty_clean_graph():
@@ -333,3 +347,111 @@ def test_set_executable():
 
     assert root.is_executable is True
     assert flow.is_dirty is True
+
+
+def test_generate_script_covers_the_whole_graph(tmp_path):
+    flow, first, second = _script_flow(tmp_path)
+
+    text = flow.generate_script()
+
+    assert text.startswith("#!/bin/bash")
+    assert "echo un" in text
+    assert "echo deux" in text
+    assert "demo.flow" in text
+
+
+def test_generate_script_from_a_node_stops_after_it(tmp_path):
+    flow, first, second = _script_flow(tmp_path)
+
+    text = flow.generate_script(from_node_id=first.id)
+
+    assert "echo un" in text
+    assert "echo deux" not in text
+
+
+def test_generate_script_does_not_touch_the_disk(tmp_path):
+    flow, first, second = _script_flow(tmp_path)
+
+    flow.generate_script()
+
+    assert list(tmp_path.glob("*.sh")) == []
+
+
+def test_generate_script_on_an_unsaved_flow_names_it_untitled():
+    flow = FlowGraph(Graph(roots=[_node("root")]))
+    assert "sans-titre.flow" in flow.generate_script()
+
+
+def test_write_script_writes_next_to_the_flow(tmp_path):
+    flow, first, second = _script_flow(tmp_path)
+
+    path = flow.write_script()
+
+    assert path == tmp_path / "demo.sh"
+    assert path.exists()
+    assert "echo deux" in path.read_text()
+
+
+def test_write_run_script_is_timestamped_and_labelled(tmp_path):
+    flow, first, second = _script_flow(tmp_path)
+
+    path = flow.write_run_script(from_node_id=first.id, timestamp="20260820-101500")
+
+    assert path.name == "demo_first_20260820-101500.sh"
+    assert "echo deux" not in path.read_text()
+
+
+def test_write_run_script_without_a_target_has_no_label(tmp_path):
+    flow, first, second = _script_flow(tmp_path)
+
+    path = flow.write_run_script(timestamp="20260820-101500")
+
+    assert path.name == "demo_20260820-101500.sh"
+
+
+def test_write_script_on_an_unsaved_flow_raises():
+    flow = FlowGraph(Graph(roots=[_node("root")]))
+    with pytest.raises(ValueError):
+        flow.write_script()
+
+
+def test_run_writes_a_timestamped_script_and_launches_it(tmp_path, monkeypatch):
+    flow, first, second = _script_flow(tmp_path)
+    calls = []
+    monkeypatch.setattr(
+        "flower.engine.api.run_script",
+        lambda path, terminal: calls.append((path, terminal)) or True,
+    )
+
+    assert flow.run(terminal="kitty") is True
+
+    (path, terminal), = calls
+    assert terminal == "kitty"
+    assert path.exists()
+    assert path.name.startswith("demo_")
+
+
+def test_run_defaults_to_the_default_terminal(tmp_path, monkeypatch):
+    flow, first, second = _script_flow(tmp_path)
+    calls = []
+    monkeypatch.setattr(
+        "flower.engine.api.run_script",
+        lambda path, terminal: calls.append((path, terminal)) or True,
+    )
+
+    flow.run()
+
+    assert calls[0][1] == DEFAULT_TERMINAL
+
+
+def test_run_reports_a_failed_launch(tmp_path, monkeypatch):
+    flow, first, second = _script_flow(tmp_path)
+    monkeypatch.setattr("flower.engine.api.run_script", lambda path, terminal: False)
+
+    assert flow.run() is False
+
+
+def test_run_from_an_unknown_node_raises(tmp_path):
+    flow, first, second = _script_flow(tmp_path)
+    with pytest.raises(ValueError):
+        flow.run(from_node_id="absent")

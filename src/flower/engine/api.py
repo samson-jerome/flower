@@ -4,6 +4,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
 from flower.engine.errors import CycleError, MaxChildrenError
+from flower.engine.execution.bash_generator import (
+    generate_bash_script, write_bash_script, write_timestamped_bash_script,
+)
+from flower.engine.execution.runner import DEFAULT_TERMINAL, run_script
+from flower.engine.execution.traversal import prune_to_node
 from flower.engine.io.xml_reader import read_flow
 from flower.engine.io.xml_writer import write_flow
 from flower.engine.models.graph import Graph
@@ -227,3 +232,54 @@ class FlowGraph:
 
     def mark_modified(self) -> None:
         self.is_dirty = True
+
+    # ── Execution ───────────────────────────────────────────────────────────
+
+    _UNTITLED = "sans-titre.flow"
+
+    def _script_graph(self, from_node_id: str | None) -> Graph:
+        """The graph a script is generated from: the whole graph, or the one
+        pruned to a target node -- everything preceding it in pre-order plus
+        the node itself, stripped of its subtree."""
+        if from_node_id is None:
+            return self.graph
+        self._require(from_node_id)      # ValueError on an unknown id
+        return prune_to_node(self.graph, from_node_id)
+
+    def _flow_name(self) -> str:
+        return self.path.name if self.path is not None else self._UNTITLED
+
+    def _require_path(self) -> Path:
+        if self.path is None:
+            raise ValueError("this flow has no path: save it before writing a script")
+        return self.path
+
+    def generate_script(self, from_node_id=None, interpreters=None) -> str:
+        """The script text. Touches no file."""
+        return generate_bash_script(
+            self._script_graph(from_node_id), self._flow_name(), interpreters
+        )
+
+    def write_script(self, from_node_id=None, interpreters=None) -> Path:
+        """Write <stem>.sh next to the flow -- the "Générer le script"
+        action -- and return its path."""
+        path = self._require_path()
+        write_bash_script(self._script_graph(from_node_id), path, interpreters)
+        return path.with_suffix(".sh")
+
+    def write_run_script(self, from_node_id=None, interpreters=None, timestamp=None) -> Path:
+        """Write <stem>[_<label>]_<timestamp>.sh, the script a run executes,
+        and return its path. `timestamp` is computed here when omitted: this
+        class is the only part of the engine allowed to read the clock, which
+        keeps the generator itself deterministic."""
+        path  = self._require_path()
+        graph = self._script_graph(from_node_id)
+        label = self._require(from_node_id).name if from_node_id is not None else ""
+        stamp = timestamp if timestamp is not None else datetime.now().strftime("%Y%m%d-%H%M%S")
+        return write_timestamped_bash_script(graph, path, stamp, interpreters, label)
+
+    def run(self, from_node_id=None, interpreters=None, terminal=None) -> bool:
+        """Write the run script and open it in a terminal. Returns whether
+        the terminal started."""
+        script_path = self.write_run_script(from_node_id, interpreters)
+        return run_script(script_path, terminal if terminal is not None else DEFAULT_TERMINAL)
