@@ -45,7 +45,11 @@ class FlowGraph:
         write leaves the flow exactly as it was -- still dirty, still pointing
         at its previous path, still carrying its previous updated_at. Stamping
         has to happen before the write, since the value travels into the file,
-        hence the snapshot."""
+        hence the snapshot. The catch is deliberately broad: write_flow() can
+        fail on the disk (OSError) as well as during serialization, before a
+        single byte is written (lxml raises ValueError/TypeError on content
+        that is not XML-compatible) -- either way, no write happened, so the
+        snapshot must be restored the same way."""
         target = path if path is not None else self.path
         if target is None:
             raise ValueError("this flow has no path: pass one to save()")
@@ -53,7 +57,7 @@ class FlowGraph:
         self.graph.updated_at = datetime.now(timezone.utc).isoformat()
         try:
             write_flow(self.graph, target)
-        except OSError:
+        except Exception:
             self.graph.updated_at = previous_updated_at
             raise
         self.path     = target

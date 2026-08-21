@@ -87,6 +87,22 @@ def test_save_leaves_the_flow_unchanged_when_the_write_fails(tmp_path):
     assert flow.is_dirty is False
 
 
+def test_save_leaves_the_flow_unchanged_when_serialization_fails(tmp_path):
+    flow = FlowGraph(Graph(notes="avant\x0capres"))
+    flow.mark_modified()
+    previous_updated_at = flow.graph.updated_at
+    previous_path = flow.path
+    target = tmp_path / "demo.flow"
+
+    with pytest.raises(ValueError):
+        flow.save(target)
+
+    assert flow.graph.updated_at == previous_updated_at
+    assert flow.path == previous_path
+    assert flow.is_dirty is True
+    assert not target.exists()
+
+
 def test_find_walks_the_whole_tree():
     flow, root, child, grandchild, _ = _tree()
     assert flow.find(grandchild.id) is grandchild
