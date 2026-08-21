@@ -260,6 +260,17 @@ def test_reparent_refuses_a_full_if_node():
     assert child in root.children
 
 
+def test_reparent_within_the_same_full_parent_reorders_instead_of_refusing():
+    parent = _node("check", NodeType.IF)
+    flow = FlowGraph(Graph(roots=[parent]))
+    first  = flow.add_node(parent.id, name="first")
+    second = flow.add_node(parent.id, name="second")
+
+    flow.reparent(first.id, parent.id, index=1)
+
+    assert parent.children == [second, first]
+
+
 def test_reorder_swaps_two_siblings():
     flow, root, child, grandchild, other = _tree()
 

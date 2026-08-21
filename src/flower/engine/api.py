@@ -129,13 +129,17 @@ class FlowGraph:
         what dropping on the canvas does.
 
         Raises CycleError when the target is the node itself or one of its
-        descendants, and MaxChildrenError when the target type is full."""
+        descendants, and MaxChildrenError when the target type is full --
+        except when the target is already the node's own parent: reordering
+        within the same parent adds no child, so the type's cap does not
+        apply there."""
         node   = self._require(node_id)
         parent = self._require(new_parent_id) if new_parent_id is not None else None
         if parent is not None:
             if parent is node or self._is_descendant_of(parent, node):
                 raise CycleError(node_id)
-            self._check_capacity(parent)
+            if node.parent is not parent:
+                self._check_capacity(parent)
         self._detach(node)
         self._attach(node, parent, index)
         self.mark_modified()
