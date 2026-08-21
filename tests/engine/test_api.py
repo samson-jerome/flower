@@ -124,10 +124,18 @@ def test_find_walks_the_whole_tree():
     assert flow.find("absent") is None
 
 
-def test_methods_taking_an_unknown_id_raise_value_error():
+def test_methods_taking_an_unknown_id_raise_value_error(tmp_path):
     flow, *_ = _tree()
     with pytest.raises(ValueError):
-        flow._require("absent")
+        flow.rename_node("absent", "renamed")
+    with pytest.raises(ValueError):
+        flow.generate_script(from_node_id="absent")
+
+    saved, *_ = _script_flow(tmp_path)
+    with pytest.raises(ValueError):
+        saved.write_script(from_node_id="absent")
+    with pytest.raises(ValueError):
+        saved.write_run_script(from_node_id="absent")
 
 
 def test_unique_name_suffixes_only_on_collision():

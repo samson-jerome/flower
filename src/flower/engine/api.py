@@ -105,6 +105,11 @@ class FlowGraph:
             raise ValueError(f"node {node_id!r} not found in graph")
         return node
 
+    def _require_path(self) -> Path:
+        if self.path is None:
+            raise ValueError("this flow has no path: nowhere to write next to it")
+        return self.path
+
     def unique_name(self, base: str) -> str:
         """`base` if no node bears it, else base_1, base_2... Only new nodes
         get a unique name; renaming does not enforce uniqueness, so duplicate
@@ -266,25 +271,27 @@ class FlowGraph:
     def _flow_name(self) -> str:
         return self.path.name if self.path is not None else self._UNTITLED
 
-    def _require_path(self) -> Path:
-        if self.path is None:
-            raise ValueError("this flow has no path: save it before writing a script")
-        return self.path
-
-    def generate_script(self, from_node_id=None, interpreters=None) -> str:
+    def generate_script(
+        self, from_node_id: str | None = None, interpreters: dict[str, str] | None = None,
+    ) -> str:
         """The script text. Touches no file."""
         return generate_bash_script(
             self._script_graph(from_node_id), self._flow_name(), interpreters
         )
 
-    def write_script(self, from_node_id=None, interpreters=None) -> Path:
+    def write_script(
+        self, from_node_id: str | None = None, interpreters: dict[str, str] | None = None,
+    ) -> Path:
         """Write <stem>.sh next to the flow -- the "Générer le script"
         action -- and return its path."""
         path = self._require_path()
         write_bash_script(self._script_graph(from_node_id), path, interpreters)
         return path.with_suffix(".sh")
 
-    def write_run_script(self, from_node_id=None, interpreters=None, timestamp=None) -> Path:
+    def write_run_script(
+        self, from_node_id: str | None = None, interpreters: dict[str, str] | None = None,
+        timestamp: str | None = None,
+    ) -> Path:
         """Write <stem>[_<label>]_<timestamp>.sh, the script a run executes,
         and return its path. `timestamp` is computed here when omitted: this
         class is the only part of the engine allowed to read the clock, which
@@ -295,7 +302,10 @@ class FlowGraph:
         stamp = timestamp if timestamp is not None else datetime.now().strftime("%Y%m%d-%H%M%S")
         return write_timestamped_bash_script(graph, path, stamp, interpreters, label)
 
-    def run(self, from_node_id=None, interpreters=None, terminal=None) -> Path | None:
+    def run(
+        self, from_node_id: str | None = None, interpreters: dict[str, str] | None = None,
+        terminal: str | None = None,
+    ) -> Path | None:
         """Write the run script and open it in a terminal. Returns the script
         path when the terminal started, None when it could not -- callers name
         the script in what they report to the user, and a script that was

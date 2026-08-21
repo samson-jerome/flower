@@ -83,6 +83,20 @@ def test_drop_onto_its_own_descendant_is_refused(qapp):
     assert received == ["Un nœud ne peut pas devenir son propre descendant."]
 
 
+def test_drop_onto_itself_is_silently_ignored(qapp):
+    root = _node("root")
+    canvas, flow = _canvas(root)
+    canvas._drag_node_id = root.id
+    received = []
+    canvas.drop_rejected.connect(received.append)
+
+    canvas._perform_drop(canvas._items[root.id].sceneBoundingRect().center())
+
+    assert not received
+    assert flow.graph.roots == [root]
+    assert flow.is_dirty is False
+
+
 def test_drop_allowed_when_target_if_node_has_one_child(qapp):
     target  = _node("check", NodeType.IF)
     child_a = _node("true_branch")

@@ -190,10 +190,11 @@ class GraphCanvas(QGraphicsView):
         return self._selected_id
 
     def set_flow(self, flow: FlowGraph) -> None:
-        """Draw `flow` and mutate it from now on. Replaces load_graph(): the
-        canvas needs the API, not just the graph, since every structural
-        change it triggers goes through it."""
+        """Draw `flow` and mutate it from now on. The canvas needs the API,
+        not just the graph, since every structural change it triggers goes
+        through it."""
         self._flow = flow
+        self._selected_id = None
         self.refresh_layout()
         # Position view so first root node appears at top-left.
         self.horizontalScrollBar().setValue(self.horizontalScrollBar().minimum())
@@ -222,14 +223,6 @@ class GraphCanvas(QGraphicsView):
             item.set_selected(nid == node_id)
         self._selected_id = node_id
         self.node_selected.emit(node_id)
-
-    def refresh_node(self, node: Node) -> None:
-        if self._flow is None:
-            return
-        fm = QFontMetrics(QFont())
-        positions = compute_layout(self._flow.graph.roots, fm.horizontalAdvance)
-        if node.id in self._items and node.id in positions:
-            self._items[node.id].refresh(node, positions[node.id])
 
     # ── Drawing ─────────────────────────────────────────────────────────────
 
@@ -390,6 +383,9 @@ class GraphCanvas(QGraphicsView):
 
         target_item = self._item_at(scene_pos)
         target_node = self._flow.find(target_item.node_id) if target_item else None
+
+        if target_node is drag_node:
+            return
 
         try:
             self._flow.reparent(drag_node.id, target_node.id if target_node else None)
