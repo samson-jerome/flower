@@ -1,7 +1,8 @@
 import uuid
+from flower.engine import api as api_module
+from flower.engine.api import FlowGraph
 from flower.engine.models.graph import Graph
 from flower.engine.models.node import Node, NodeType
-from flower.app import main_window as main_window_module
 from flower.app.main_window import MainWindow
 
 
@@ -26,13 +27,11 @@ def _window(graph, flow_path, monkeypatch):
     appends every launched script path to."""
     launched = []
     monkeypatch.setattr(
-        main_window_module, "run_script",
-        lambda script_path: (launched.append(script_path), True)[1],
+        api_module, "run_script",
+        lambda script_path, terminal=None: (launched.append(script_path), True)[1],
     )
     win = MainWindow()
-    win._graph = graph
-    win._path  = flow_path
-    win._canvas.load_graph(graph)
+    win._load(FlowGraph(graph, flow_path))
     return win, launched
 
 

@@ -1,14 +1,14 @@
 from __future__ import annotations
-import uuid
 from pathlib import Path
-from datetime import datetime, timezone
 from PySide6.QtWidgets import (
     QMainWindow, QSplitter, QMessageBox, QFileDialog, QLabel, QApplication,
 )
 from PySide6.QtCore import Qt, QSettings
-from flower.engine.models.graph import Graph
-from flower.engine.models.node import Node, NodeType, MAX_CHILDREN, can_exec
+from flower.engine.api import FlowGraph
+from flower.engine.errors import GraphRuleError
+from flower.engine.models.node import Node, can_exec
 from flower.app.canvas import GraphCanvas
+from flower.app.messages import rule_message
 from flower.app.toolbar import ToolBar
 from flower.app.dock_panel import DockPanel
 from flower.app.notes_panel import NotesPanel, bind_notes_to_splitter
@@ -16,12 +16,7 @@ from flower.app.vars_panel import VarsPanel
 from flower.app.editor.editor_window import EditorWindow
 from flower.app.preferences_dialog import PreferencesDialog
 from flower.app.theme import is_dark
-from flower.engine.io.xml_writer import write_flow
-from flower.engine.io.xml_reader import read_flow
 from flower.app.interpreters import load_interpreters
-from flower.engine.execution.bash_generator import write_bash_script, write_timestamped_bash_script
-from flower.engine.execution.runner import run_script
-from flower.engine.execution.traversal import prune_to_node
 
 # (background, text) pairs, keyed by whether the app is currently dark.
 # Same palette as flower.app.editor.node_form, for visual consistency between
@@ -36,36 +31,14 @@ _VARIABLES_COLORS = {
 }
 
 
-def _collect_names(graph: Graph) -> set[str]:
-    names: set[str] = set()
-    def _walk(nodes: list[Node]) -> None:
-        for n in nodes:
-            names.add(n.name)
-            _walk(n.children)
-    _walk(graph.roots)
-    return names
-
-
-def _unique_name(base: str, graph: Graph) -> str:
-    existing = _collect_names(graph)
-    if base not in existing:
-        return base
-    i = 1
-    while f"{base}_{i}" in existing:
-        i += 1
-    return f"{base}_{i}"
-
-
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Flower")
         self.resize(1100, 700)
 
-        self._graph:           Graph                     = Graph()
-        self._path:            Path | None               = None
-        self._dirty:           bool                      = False
-        self._editor_windows:  dict[str, EditorWindow]   = {}
+        self._flow:           FlowGraph               = FlowGraph.new()
+        self._editor_windows: dict[str, EditorWindow] = {}
 
         self._toolbar     = ToolBar(self)
         self._canvas      = GraphCanvas()
@@ -106,7 +79,7 @@ class MainWindow(QMainWindow):
 
         self._build_menu()
         self._connect_signals()
-        self._canvas.load_graph(self._graph)
+        self._canvas.set_flow(self._flow)
         self._sync_notes_from_graph()
         self._sync_vars_from_graph()
 
@@ -137,7 +110,7 @@ class MainWindow(QMainWindow):
         self._canvas.node_edit_requested.connect(self._open_editor)
         self._canvas.add_child_requested.connect(self._add_child_node)
         self._canvas.delete_requested.connect(self._delete_selected_node)
-        self._canvas.node_active_changed.connect(self.mark_dirty)
+        self._canvas.graph_changed.connect(self._update_title)
         self._canvas.drop_rejected.connect(lambda msg: self.statusBar().showMessage(msg, 3000))
         self._canvas.node_exec_requested.connect(self._exec_node)
         self._toolbar.add_node_requested.connect(self._add_child_node)
@@ -151,7 +124,7 @@ class MainWindow(QMainWindow):
     # ── File operations ─────────────────────────────────────────────────────
 
     def _confirm_discard(self) -> bool:
-        if not self._dirty:
+        if not self._flow.is_dirty:
             return True
         r = QMessageBox.question(
             self, "Modifications non sauvegardées",
@@ -162,16 +135,7 @@ class MainWindow(QMainWindow):
     def _new_file(self) -> None:
         if not self._confirm_discard():
             return
-        self._graph = Graph()
-        self._path  = None
-        self._dirty = False
-        self._close_all_editors()
-        self._dock_panel.clear()
-        self._canvas.load_graph(self._graph)
-        self._sync_notes_from_graph()
-        self._sync_vars_from_graph()
-        self._status_node_label.clear()
-        self._update_title()
+        self._load(FlowGraph.new())
 
     def _open_file(self) -> None:
         if not self._confirm_discard():
@@ -186,140 +150,116 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Fichier introuvable", f"Le fichier n'existe plus :\n{path}")
             self._remove_recent(path)
             return
-        self._graph = read_flow(path)
-        self._path  = path
-        self._dirty = False
+        self._load(FlowGraph.open(path))
+        self._add_recent(path)
+
+    def _load(self, flow: FlowGraph) -> None:
+        """Swap in a freshly opened or created flow and reset everything that
+        pointed into the previous one."""
+        self._flow = flow
         self._close_all_editors()
         self._dock_panel.clear()
-        self._canvas.load_graph(self._graph)
+        self._canvas.set_flow(flow)
         self._sync_notes_from_graph()
         self._sync_vars_from_graph()
         self._status_node_label.clear()
         self._update_title()
-        self._add_recent(path)
 
     def _save_file(self) -> None:
-        if self._path is None:
+        if self._flow.path is None:
             self._save_as()
             return
-        self._graph.updated_at = datetime.now(timezone.utc).isoformat()
-        write_flow(self._graph, self._path)
-        self._dirty = False
+        self._flow.save()
         self._update_title()
         self.statusBar().showMessage("Fichier sauvegardé", 3000)
-        self._add_recent(self._path)
+        self._add_recent(self._flow.path)
 
     def _save_as(self) -> None:
         path, _ = QFileDialog.getSaveFileName(self, "Sauver sous", "", "Flow files (*.flow)")
         if not path:
             return
-        self._path = Path(path if path.endswith(".flow") else path + ".flow")
-        self._save_file()
+        self._flow.save(Path(path if path.endswith(".flow") else path + ".flow"))
+        self._update_title()
+        self.statusBar().showMessage("Fichier sauvegardé", 3000)
+        self._add_recent(self._flow.path)
 
     def _generate_script(self) -> None:
-        if self._path is None:
-            self._save_as()
-            if self._path is None:  # user cancelled the save dialog
-                return
-        write_bash_script(self._graph, self._path, interpreters=load_interpreters())
-        self.statusBar().showMessage(
-            f"Script généré : {self._path.with_suffix('.sh').name}", 3000
-        )
+        if not self._ensure_saved():
+            return
+        path = self._flow.write_script(interpreters=load_interpreters())
+        self.statusBar().showMessage(f"Script généré : {path.name}", 3000)
 
     def _launch_script(self) -> None:
-        if self._path is None:
-            self._save_as()
-            if self._path is None:  # user cancelled the save dialog
-                return
-        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        script_path = write_timestamped_bash_script(
-            self._graph, self._path, timestamp, interpreters=load_interpreters()
-        )
-        if run_script(script_path):
-            self.statusBar().showMessage(f"Script lancé : {script_path.name}", 3000)
+        if not self._ensure_saved():
+            return
+        if self._flow.run(interpreters=load_interpreters()):
+            self.statusBar().showMessage("Script lancé", 3000)
         else:
             QMessageBox.warning(
                 self, "Échec du lancement",
-                f"Impossible d'ouvrir un terminal pour exécuter {script_path.name}.",
+                "Impossible d'ouvrir un terminal pour exécuter le script.",
             )
 
+    def _ensure_saved(self) -> bool:
+        """A script is written next to the .flow, so an unsaved flow has
+        nowhere to put it. Returns False when the user cancels."""
+        if self._flow.path is not None:
+            return True
+        self._save_as()
+        return self._flow.path is not None
+
     def _exec_node(self, node_id: str) -> None:
-        """Run the graph up to `node_id` included: generate the pruned script
-        next to the .flow file, then open it in a terminal. Same guards as
+        """Run the graph up to `node_id` included. Same guards as
         _launch_script(), plus the node's own eligibility -- both call sites
         filter already, but this is the only place that starts an execution and
         has to be safe on its own."""
-        node = self._canvas._find_node(node_id)
+        node = self._flow.find(node_id)
         if node is None or not can_exec(node) or not node.is_active:
             return
         # NodeForm.apply_to_node() writes is_active straight into the node
-        # with no ancestor repair (unlike canvas._on_active_toggled()), so an
-        # active node under an inactive ancestor is reachable from the editor.
-        # The generator drops the whole subtree at an inactive ancestor, so
-        # without this guard the script would hold nothing but boilerplate
-        # while the status bar reports success.
+        # with no ancestor repair (unlike FlowGraph.set_active()), so an active
+        # node under an inactive ancestor is reachable from the editor. The
+        # generator drops the whole subtree at an inactive ancestor, so without
+        # this guard the script would hold nothing but boilerplate while the
+        # status bar reports success.
         ancestor = node.parent
         while ancestor is not None:
             if not ancestor.is_active:
                 self.statusBar().showMessage("Un nœud parent est inactif : rien à exécuter.", 3000)
                 return
             ancestor = ancestor.parent
-        if self._path is None:
-            self._save_as()
-            if self._path is None:  # user cancelled the save dialog
-                return
-        script_path = write_timestamped_bash_script(
-            prune_to_node(self._graph, node_id), self._path,
-            datetime.now().strftime("%Y%m%d-%H%M%S"),
-            interpreters=load_interpreters(), label=node.name,
-        )
-        if run_script(script_path):
-            self.statusBar().showMessage(f"Exécution partielle : {script_path.name}", 3000)
+        if not self._ensure_saved():
+            return
+        if self._flow.run(node_id, interpreters=load_interpreters()):
+            self.statusBar().showMessage("Exécution partielle lancée", 3000)
         else:
             QMessageBox.warning(
                 self, "Échec du lancement",
-                f"Impossible d'ouvrir un terminal pour exécuter {script_path.name}.",
+                "Impossible d'ouvrir un terminal pour exécuter le script.",
             )
 
     # ── Node operations ─────────────────────────────────────────────────────
 
     def _add_child_node(self) -> None:
-        parent_id = self._canvas._selected_id
-        parent = self._canvas._find_node(parent_id) if parent_id else None
-        if parent is not None:
-            max_children = MAX_CHILDREN.get(parent.type)
-            if max_children is not None and len(parent.children) >= max_children:
-                self.statusBar().showMessage(
-                    f"Un nœud « {parent.type.value} » ne peut avoir plus de "
-                    f"{max_children} enfant(s).",
-                    3000,
-                )
-                return
-        new_node = Node(id=str(uuid.uuid4()), name=_unique_name("nouveau", self._graph), type=NodeType.NOOP)
-        if parent is not None:
-            new_node.parent = parent
-            parent.children.append(new_node)
-        else:
-            self._graph.roots.append(new_node)
-        self.mark_dirty()
+        parent_id = self._canvas.selected_id
+        try:
+            self._flow.add_node(parent_id)
+        except GraphRuleError as error:
+            self.statusBar().showMessage(rule_message(error), 3000)
+            return
+        self._update_title()
         self._canvas.refresh_layout()
         if parent_id:
             self._canvas.select_node(parent_id)
 
     def _delete_selected_node(self) -> None:
-        node_id = self._canvas._selected_id
-        if node_id is None:
+        node_id = self._canvas.selected_id
+        if node_id is None or self._flow.find(node_id) is None:
             return
-        node = self._canvas._find_node(node_id)
-        if node is None:
-            return
-        if node.parent:
-            node.parent.children.remove(node)
-        elif node in self._graph.roots:
-            self._graph.roots.remove(node)
+        self._flow.remove_node(node_id)
         self._close_editor(node_id)
         self._dock_panel.remove(node_id)
-        self.mark_dirty()
+        self._update_title()
         self._canvas.refresh_layout()
         self._status_node_label.clear()
         self.statusBar().showMessage("Nœud supprimé", 3000)
@@ -334,7 +274,7 @@ class MainWindow(QMainWindow):
             win.raise_()
             win.activateWindow()
             return
-        node = self._canvas._find_node(node_id)
+        node = self._flow.find(node_id)
         if node is None:
             return
         win = EditorWindow(node, parent=None)
@@ -355,7 +295,8 @@ class MainWindow(QMainWindow):
         self._editor_windows.clear()
 
     def _on_node_updated(self, node_id: str, node: Node) -> None:
-        self.mark_dirty()
+        self._flow.mark_modified()
+        self._update_title()
         self._canvas.refresh_layout()
         self._canvas.select_node(node_id)
         self._update_status_node(node)
@@ -363,7 +304,7 @@ class MainWindow(QMainWindow):
     # ── Selection ────────────────────────────────────────────────────────────
 
     def _on_node_selected(self, node_id: str) -> None:
-        node = self._canvas._find_node(node_id)
+        node = self._flow.find(node_id)
         if node:
             self._update_status_node(node)
 
@@ -373,7 +314,7 @@ class MainWindow(QMainWindow):
         win = self._editor_windows.get(node_id)
         if win is None:
             return
-        node = self._canvas._find_node(node_id)
+        node = self._flow.find(node_id)
         if node is None:
             return
         form = win.extract_form()
@@ -387,7 +328,7 @@ class MainWindow(QMainWindow):
         self._dock_panel.dock(node_id, node, form)
 
     def _on_undock_requested(self, node_id: str) -> None:
-        node = self._canvas._find_node(node_id)
+        node = self._flow.find(node_id)
         if node is None:
             return
         if node_id not in self._dock_panel._entries:
@@ -406,31 +347,33 @@ class MainWindow(QMainWindow):
         self._dock_panel.remove(node_id)
 
     def _on_name_changed(self, node_id: str, new_name: str) -> None:
-        node = self._canvas._find_node(node_id)
+        node = self._flow.find(node_id)
         if node is None:
             return
-        node.name = new_name
-        self.mark_dirty()
+        self._flow.rename_node(node_id, new_name)
+        self._update_title()
         self._canvas.refresh_layout()
         win = self._editor_windows.get(node_id)
         if win:
             win.setWindowTitle(f"Éditer — {node.type} · {new_name}")
 
     def _on_notes_changed(self, text: str) -> None:
-        if self._graph.notes == text:
+        if self._flow.graph.notes == text:
             return
-        self._graph.notes = text
-        self.mark_dirty()
+        self._flow.graph.notes = text
+        self._flow.mark_modified()
+        self._update_title()
 
     def _sync_notes_from_graph(self) -> None:
-        self._notes.set_text(self._graph.notes)
+        self._notes.set_text(self._flow.graph.notes)
 
     def _sync_vars_from_graph(self) -> None:
-        self._global_vars.set_variables(self._graph.variables)
+        self._global_vars.set_variables(self._flow.graph.variables)
 
     def _on_global_vars_changed(self) -> None:
-        self._graph.variables = self._global_vars.get_variables()
-        self.mark_dirty()
+        self._flow.graph.variables = self._global_vars.get_variables()
+        self._flow.mark_modified()
+        self._update_title()
 
     def _apply_theme_colors(self, *_args) -> None:
         dark = is_dark(QApplication.instance())
@@ -496,13 +439,9 @@ class MainWindow(QMainWindow):
         active = "actif" if node.is_active else "inactif"
         self._status_node_label.setText(f"{node.type} · {node.name} · {active}")
 
-    def mark_dirty(self) -> None:
-        self._dirty = True
-        self._update_title()
-
     def _update_title(self) -> None:
-        name  = self._path.name if self._path else "Sans titre"
-        dirty = " *" if self._dirty else ""
+        name  = self._flow.path.name if self._flow.path else "Sans titre"
+        dirty = " *" if self._flow.is_dirty else ""
         self.setWindowTitle(f"Flower — {name}{dirty}")
 
     def closeEvent(self, event) -> None:

@@ -2,35 +2,17 @@ from __future__ import annotations
 from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QApplication
 from PySide6.QtGui import QPainter, QKeyEvent, QFontMetrics, QFont, QPixmap, QColor, QPen, QBrush, QPainterPath
 from PySide6.QtCore import Qt, Signal, QPoint, QPointF, QRectF
-from flower.engine.models.graph import Graph
-from flower.engine.models.node import Node, NodeType, MAX_CHILDREN
+from flower.engine.api import FlowGraph
+from flower.engine.errors import GraphRuleError
+from flower.engine.models.node import Node
 from flower.app.layout.tree_layout import compute_layout, NodePos, node_label
 from flower.app.node_item import NodeItem, NodeItemSignals, NodeZone, NODE_HEIGHT, _TYPE_COLORS
 from flower.app.edge_item import EdgeItem
+from flower.app.messages import rule_message
 from flower.app.theme import is_dark
 
 _CANVAS_BG_DARK  = "#1e1e1e"
 _CANVAS_BG_LIGHT = "#e3e3e3"
-
-
-def _deactivate_subtree(node: Node) -> None:
-    for child in node.children:
-        child.is_active = False
-        _deactivate_subtree(child)
-
-
-def _activate_ancestors(node: Node) -> None:
-    parent = node.parent
-    while parent is not None:
-        parent.is_active = True
-        parent = parent.parent
-
-
-def _activate_subtree(node: Node) -> None:
-    for child in node.children:
-        child.is_active = True
-        _activate_subtree(child)
-
 
 _DRAG_GHOST_W       = 180
 _DRAG_GHOST_MAX     = 4    # node + up to 3 children shown
@@ -156,7 +138,7 @@ class GraphCanvas(QGraphicsView):
     node_exec_requested = Signal(str)  # node_id
     add_child_requested = Signal()
     delete_requested    = Signal()
-    node_active_changed = Signal()     # graph mutated, mark dirty
+    graph_changed       = Signal()     # the flow was mutated
     drop_rejected       = Signal(str)  # message for the status bar
 
     def __init__(self, parent=None):
@@ -171,7 +153,7 @@ class GraphCanvas(QGraphicsView):
         if app is not None:
             app.paletteChanged.connect(self._apply_canvas_theme)
 
-        self._graph:              Graph | None        = None
+        self._flow:               FlowGraph | None    = None
         self._items:              dict[str, NodeItem] = {}
         self._selected_id:        str | None          = None
         self._space_held:         bool                = False
@@ -203,21 +185,28 @@ class GraphCanvas(QGraphicsView):
 
     # ── Public API ──────────────────────────────────────────────────────────
 
-    def load_graph(self, graph: Graph) -> None:
-        self._graph = graph
+    @property
+    def selected_id(self) -> str | None:
+        return self._selected_id
+
+    def set_flow(self, flow: FlowGraph) -> None:
+        """Draw `flow` and mutate it from now on. Replaces load_graph(): the
+        canvas needs the API, not just the graph, since every structural
+        change it triggers goes through it."""
+        self._flow = flow
         self.refresh_layout()
         # Position view so first root node appears at top-left.
         self.horizontalScrollBar().setValue(self.horizontalScrollBar().minimum())
         self.verticalScrollBar().setValue(self.verticalScrollBar().minimum())
 
     def refresh_layout(self) -> None:
-        if self._graph is None:
+        if self._flow is None:
             return
         self._scene.clear()
         self._items.clear()
         fm = QFontMetrics(QFont())
-        positions = compute_layout(self._graph.roots, fm.horizontalAdvance)
-        self._draw(self._graph.roots, positions)
+        positions = compute_layout(self._flow.graph.roots, fm.horizontalAdvance)
+        self._draw(self._flow.graph.roots, positions)
         self._update_scene_rect()
 
     def _update_scene_rect(self) -> None:
@@ -235,10 +224,10 @@ class GraphCanvas(QGraphicsView):
         self.node_selected.emit(node_id)
 
     def refresh_node(self, node: Node) -> None:
-        if self._graph is None:
+        if self._flow is None:
             return
         fm = QFontMetrics(QFont())
-        positions = compute_layout(self._graph.roots, fm.horizontalAdvance)
+        positions = compute_layout(self._flow.graph.roots, fm.horizontalAdvance)
         if node.id in self._items and node.id in positions:
             self._items[node.id].refresh(node, positions[node.id])
 
@@ -268,31 +257,26 @@ class GraphCanvas(QGraphicsView):
         self.select_node(node_id)
 
     def _on_collapsed_toggled(self, node_id: str) -> None:
-        node = self._find_node(node_id)
+        node = self._flow.find(node_id) if self._flow else None
         if node is None:
             return
-        node.is_collapsed = not node.is_collapsed
+        self._flow.set_collapsed(node_id, not node.is_collapsed)
         prev_selected = self._selected_id
         self.refresh_layout()
         if prev_selected:
             self.select_node(prev_selected)
-        self.node_active_changed.emit()
+        self.graph_changed.emit()
 
     def _on_active_toggled(self, node_id: str) -> None:
-        node = self._find_node(node_id)
+        node = self._flow.find(node_id) if self._flow else None
         if node is None:
             return
-        node.is_active = not node.is_active
-        if not node.is_active:
-            _deactivate_subtree(node)
-        else:
-            _activate_ancestors(node)
-            _activate_subtree(node)
+        self._flow.set_active(node_id, not node.is_active)
         prev_selected = self._selected_id
         self.refresh_layout()
         if prev_selected:
             self.select_node(prev_selected)
-        self.node_active_changed.emit()
+        self.graph_changed.emit()
 
     def _on_exec_requested(self, node_id: str) -> None:
         """Queued, like the other item-driven handlers: the receiver may open a
@@ -331,7 +315,7 @@ class GraphCanvas(QGraphicsView):
                 self._drag_node_id = self._drag_candidate_id
                 self.setCursor(Qt.CursorShape.DragMoveCursor)
                 # Create the drag ghost.
-                drag_node = self._find_node(self._drag_node_id)
+                drag_node = self._flow.find(self._drag_node_id) if self._flow else None
                 if drag_node is not None:
                     pix = _create_drag_pixmap_from_layout(
                         drag_node, self._items, is_dark(QApplication.instance())
@@ -388,12 +372,8 @@ class GraphCanvas(QGraphicsView):
 
     def _update_drop_highlight(self, scene_pos: QPointF) -> None:
         candidate = self._item_at(scene_pos)
-        if candidate and (
-            candidate.node_id == self._drag_node_id
-            or self._is_ancestor_of(self._drag_node_id, self._find_node(candidate.node_id))
-        ):
+        if candidate and candidate.node_id == self._drag_node_id:
             candidate = None
-
         if self._highlight_item is not candidate:
             if self._highlight_item:
                 self._highlight_item.set_drop_highlight(False)
@@ -401,57 +381,21 @@ class GraphCanvas(QGraphicsView):
             if self._highlight_item:
                 self._highlight_item.set_drop_highlight(True)
 
-    def _is_ancestor_of(self, ancestor_id: str | None, node: Node | None) -> bool:
-        """Return True if ancestor_id is in node's ancestor chain (node is a descendant)."""
-        if ancestor_id is None or node is None:
-            return False
-        current = node.parent
-        while current is not None:
-            if current.id == ancestor_id:
-                return True
-            current = current.parent
-        return False
-
     def _perform_drop(self, scene_pos: QPointF) -> None:
-        if self._drag_node_id is None or self._graph is None:
+        if self._drag_node_id is None or self._flow is None:
             return
-        drag_node = self._find_node(self._drag_node_id)
+        drag_node = self._flow.find(self._drag_node_id)
         if drag_node is None:
             return
 
         target_item = self._item_at(scene_pos)
-        target_node = self._find_node(target_item.node_id) if target_item else None
+        target_node = self._flow.find(target_item.node_id) if target_item else None
 
-        # Refuse drop on self or on own descendants.
-        if target_node is not None and (
-            target_node.id == drag_node.id
-            or self._is_ancestor_of(drag_node.id, target_node)
-        ):
+        try:
+            self._flow.reparent(drag_node.id, target_node.id if target_node else None)
+        except GraphRuleError as error:
+            self.drop_rejected.emit(rule_message(error))
             return
-
-        # Refuse if it would exceed the target type's max-children constraint.
-        if target_node is not None:
-            max_children = MAX_CHILDREN.get(target_node.type)
-            if max_children is not None and len(target_node.children) >= max_children:
-                self.drop_rejected.emit(
-                    f"Un nœud « {target_node.type.value} » ne peut avoir plus de "
-                    f"{max_children} enfant(s)."
-                )
-                return
-
-        # Detach from current parent.
-        if drag_node.parent:
-            drag_node.parent.children.remove(drag_node)
-        elif drag_node in self._graph.roots:
-            self._graph.roots.remove(drag_node)
-
-        # Attach to new parent (last child) or as new root.
-        if target_node is not None:
-            drag_node.parent = target_node
-            target_node.children.append(drag_node)
-        else:
-            drag_node.parent = None
-            self._graph.roots.append(drag_node)
 
         # Nullify before refresh_layout() — it destroys all scene items.
         self._highlight_item = None
@@ -459,7 +403,7 @@ class GraphCanvas(QGraphicsView):
 
         self.refresh_layout()
         self.select_node(drag_node.id)
-        self.node_active_changed.emit()
+        self.graph_changed.emit()
 
     def _clear_drag(self) -> None:
         if self._drag_ghost:
@@ -488,9 +432,9 @@ class GraphCanvas(QGraphicsView):
         super().keyReleaseEvent(event)
 
     def _handle_nav_key(self, event: QKeyEvent) -> None:
-        if self._graph is None or self._selected_id is None:
+        if self._flow is None or self._selected_id is None:
             return
-        node = self._find_node(self._selected_id)
+        node = self._flow.find(self._selected_id)
         if node is None:
             return
         key = event.key()
@@ -517,31 +461,16 @@ class GraphCanvas(QGraphicsView):
         elif key == Qt.Key.Key_Delete:
             self.delete_requested.emit()
 
-    def _find_node(self, node_id: str) -> Node | None:
-        def _search(nodes: list[Node]) -> Node | None:
-            for n in nodes:
-                if n.id == node_id:
-                    return n
-                found = _search(n.children)
-                if found:
-                    return found
-            return None
-        return _search(self._graph.roots) if self._graph else None
-
-    def _siblings(self, node: Node) -> list[Node]:
-        return node.parent.children if node.parent else (self._graph.roots if self._graph else [])
-
     def _select_sibling(self, node: Node, delta: int) -> None:
-        siblings = self._siblings(node)
+        siblings = node.parent.children if node.parent else self._flow.graph.roots
         idx = next((i for i, n in enumerate(siblings) if n.id == node.id), None)
         if idx is not None and 0 <= idx + delta < len(siblings):
             self.select_node(siblings[idx + delta].id)
 
     def _reorder_sibling(self, node: Node, delta: int) -> None:
-        siblings = self._siblings(node)
-        idx = next((i for i, n in enumerate(siblings) if n.id == node.id), None)
-        if idx is not None:
-            new_idx = idx + delta
-            if 0 <= new_idx < len(siblings):
-                siblings[idx], siblings[new_idx] = siblings[new_idx], siblings[idx]
-                self.refresh_layout()
+        if self._flow is None:
+            return
+        self._flow.reorder(node.id, delta)
+        self.refresh_layout()
+        self.select_node(node.id)
+        self.graph_changed.emit()
