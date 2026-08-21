@@ -66,6 +66,27 @@ def test_save_remembers_the_path_it_was_given(tmp_path):
     assert flow.path == path
 
 
+def test_save_leaves_the_flow_unchanged_when_the_write_fails(tmp_path):
+    flow = FlowGraph(Graph(roots=[_node("root")]))
+    flow.mark_modified()
+    previous_updated_at = flow.graph.updated_at
+    previous_path = flow.path
+    bad_path = tmp_path / "absent" / "demo.flow"
+
+    with pytest.raises(OSError):
+        flow.save(bad_path)
+
+    assert flow.graph.updated_at == previous_updated_at
+    assert flow.path == previous_path
+    assert flow.is_dirty is True
+
+    good_path = tmp_path / "demo.flow"
+    flow.save(good_path)
+
+    assert flow.path == good_path
+    assert flow.is_dirty is False
+
+
 def test_find_walks_the_whole_tree():
     flow, root, child, grandchild, _ = _tree()
     assert flow.find(grandchild.id) is grandchild

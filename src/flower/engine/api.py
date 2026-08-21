@@ -39,13 +39,24 @@ class FlowGraph:
     def save(self, path: Path | None = None) -> None:
         """Write the graph, stamping updated_at. `path` becomes the flow's
         path when given (Save As); without one, a flow that never had a path
-        raises rather than guessing a filename."""
-        if path is not None:
-            self.path = path
-        if self.path is None:
+        raises rather than guessing a filename.
+
+        Nothing is committed to the object until the write succeeds: a failed
+        write leaves the flow exactly as it was -- still dirty, still pointing
+        at its previous path, still carrying its previous updated_at. Stamping
+        has to happen before the write, since the value travels into the file,
+        hence the snapshot."""
+        target = path if path is not None else self.path
+        if target is None:
             raise ValueError("this flow has no path: pass one to save()")
+        previous_updated_at = self.graph.updated_at
         self.graph.updated_at = datetime.now(timezone.utc).isoformat()
-        write_flow(self.graph, self.path)
+        try:
+            write_flow(self.graph, target)
+        except OSError:
+            self.graph.updated_at = previous_updated_at
+            raise
+        self.path     = target
         self.is_dirty = False
 
     # ── Access ──────────────────────────────────────────────────────────────
