@@ -5,7 +5,7 @@ from pygments.styles import get_style_by_name
 from pygments.token import Token
 from flower.app.editor import highlighter as highlighter_mod
 from flower.app.editor.highlighter import PygmentsHighlighter
-from flower.app.theme import is_dark
+from flower.app.prefs.theme import is_dark
 
 
 def _edit(language, text):

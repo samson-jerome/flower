@@ -5,7 +5,7 @@ from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QFont
 from PySide6.QtCore import Qt, QRectF, Signal, QObject
 from flower.engine.models.node import Node, NodeType, can_exec
 from flower.app.layout.tree_layout import NodePos, node_label, EXEC_BTN_W, EXEC_ZONE_W
-from flower.app.theme import is_dark
+from flower.app.prefs.theme import is_dark
 
 NODE_HEIGHT     = 32.0
 ACTIVE_ZONE_W   = 20.0   # activity dot on the left

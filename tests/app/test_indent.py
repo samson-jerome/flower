@@ -1,7 +1,7 @@
 import pytest
 from PySide6.QtCore import QSettings
-from flower.app import indent as indent_mod
-from flower.app.indent import (
+from flower.app.prefs import indent as indent_mod
+from flower.app.prefs.indent import (
     DEFAULT_INDENT_WIDTH, MAX_INDENT_WIDTH, MIN_INDENT_WIDTH,
     load_indent_width, save_indent_width,
 )

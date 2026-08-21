@@ -2,7 +2,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QKeyEvent, QTextCursor
 from PySide6.QtWidgets import QTextEdit
-from flower.app.indent import load_indent_width
+from flower.app.prefs.indent import load_indent_width
 
 
 def _indent_level_size(text: str, width: int) -> int:

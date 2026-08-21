@@ -1,8 +1,8 @@
 import pytest
 from PySide6.QtCore import QSettings
 from pygments.styles import get_all_styles
-from flower.app import highlight_styles as styles_mod
-from flower.app.highlight_styles import (
+from flower.app.prefs import highlight_styles as styles_mod
+from flower.app.prefs.highlight_styles import (
     DARK_STYLES, LIGHT_STYLES, load_style, notifier, save_style,
 )
 

@@ -1,7 +1,7 @@
 import pytest
 from PySide6.QtCore import QSettings
-from flower.app import interpreters as interpreters_mod
-from flower.app.interpreters import load_interpreters, save_interpreter
+from flower.app.prefs import interpreters as interpreters_mod
+from flower.app.prefs.interpreters import load_interpreters, save_interpreter
 from flower.engine.execution.bash_generator import DEFAULT_INTERPRETERS
 
 

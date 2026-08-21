@@ -9,7 +9,7 @@ from flower.engine.models.node import Node, NodeType, MAX_CHILDREN, EXECUTABLE_T
 from flower.app.editor.type_editors import make_type_editor
 from flower.app.vars_panel import VarsPanel
 from flower.app.notes_panel import NotesPanel, bind_notes_to_splitter
-from flower.app.theme import is_dark
+from flower.app.prefs.theme import is_dark
 
 # (background, text) pairs, keyed by whether the app is currently dark.
 _DESCRIPTION_COLORS = {

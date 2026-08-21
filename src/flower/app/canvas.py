@@ -9,7 +9,7 @@ from flower.app.layout.tree_layout import compute_layout, NodePos, node_label
 from flower.app.node_item import NodeItem, NodeItemSignals, NodeZone, NODE_HEIGHT, _TYPE_COLORS
 from flower.app.edge_item import EdgeItem
 from flower.app.messages import rule_message
-from flower.app.theme import is_dark
+from flower.app.prefs.theme import is_dark
 
 _CANVAS_BG_DARK  = "#1e1e1e"
 _CANVAS_BG_LIGHT = "#e3e3e3"

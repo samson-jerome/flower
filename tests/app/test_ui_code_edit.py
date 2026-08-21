@@ -2,7 +2,7 @@ import pytest
 from PySide6.QtCore import Qt, QSettings
 from PySide6.QtGui import QFont, QTextCursor
 from PySide6.QtTest import QTest
-from flower.app import indent as indent_mod
+from flower.app.prefs import indent as indent_mod
 from flower.app.editor.code_edit import CodeEdit
 
 

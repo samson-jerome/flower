@@ -4,14 +4,15 @@ from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import QDialog, QPushButton
 from pygments.styles import get_style_by_name
 from pygments.token import Token
-from flower.app import theme as theme_mod
-from flower.app import interpreters as interpreters_mod
-from flower.app import highlight_styles as highlight_styles_mod
-from flower.app import indent as indent_mod
-from flower.app.theme import Theme, load_theme, save_theme
-from flower.app.interpreters import load_interpreters, save_interpreter
-from flower.app.highlight_styles import DARK_STYLES, LIGHT_STYLES, load_style, save_style
-from flower.app.indent import (
+from flower.app.prefs import theme as theme_mod
+from flower.app.prefs import interpreters as interpreters_mod
+from flower.app.prefs import highlight_styles as highlight_styles_mod
+from flower.app.prefs import indent as indent_mod
+from flower.app.prefs import terminal as terminal_mod
+from flower.app.prefs.theme import Theme, load_theme, save_theme
+from flower.app.prefs.interpreters import load_interpreters, save_interpreter
+from flower.app.prefs.highlight_styles import DARK_STYLES, LIGHT_STYLES, load_style, save_style
+from flower.app.prefs.indent import (
     MAX_INDENT_WIDTH, MIN_INDENT_WIDTH, load_indent_width, save_indent_width,
 )
 from flower.engine.execution.bash_generator import DEFAULT_INTERPRETERS
@@ -31,6 +32,7 @@ def isolated_settings(tmp_path, monkeypatch):
     monkeypatch.setattr(interpreters_mod, "QSettings", settings_factory)
     monkeypatch.setattr(highlight_styles_mod, "QSettings", settings_factory)
     monkeypatch.setattr(indent_mod, "QSettings", settings_factory)
+    monkeypatch.setattr(terminal_mod, "QSettings", settings_factory)
 
 
 @pytest.fixture(autouse=True)
@@ -79,6 +81,19 @@ def test_editing_interpreter_field_saves_on_editing_finished(qapp):
     dialog._interp_edits["javascript"].setText("nodejs")
     dialog._interp_edits["javascript"].editingFinished.emit()
     assert load_interpreters()["javascript"] == "nodejs"
+
+
+def test_terminal_field_saves_on_editing_finished(qapp, monkeypatch):
+    saved = []
+    monkeypatch.setattr(
+        "flower.app.preferences_dialog.save_terminal", lambda cmd: saved.append(cmd)
+    )
+    dialog = PreferencesDialog()
+
+    dialog._terminal_edit.setText("kitty")
+    dialog._terminal_edit.editingFinished.emit()
+
+    assert saved == ["kitty"]
 
 
 def _keyword_color(preview):

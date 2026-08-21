@@ -7,12 +7,13 @@ from PySide6.QtWidgets import (
 )
 from pygments.styles import get_style_by_name
 from pygments.token import Token
-from flower.app.theme import Theme, apply_theme, load_theme, save_theme
-from flower.app.interpreters import load_interpreters, save_interpreter
-from flower.app.highlight_styles import DARK_STYLES, LIGHT_STYLES, load_style, save_style
-from flower.app.indent import (
+from flower.app.prefs.theme import Theme, apply_theme, load_theme, save_theme
+from flower.app.prefs.interpreters import load_interpreters, save_interpreter
+from flower.app.prefs.highlight_styles import DARK_STYLES, LIGHT_STYLES, load_style, save_style
+from flower.app.prefs.indent import (
     MAX_INDENT_WIDTH, MIN_INDENT_WIDTH, load_indent_width, save_indent_width,
 )
+from flower.app.prefs.terminal import load_terminal, save_terminal
 from flower.app.editor.code_edit import CodeEdit
 from flower.app.editor.highlighter import PygmentsHighlighter
 
@@ -105,6 +106,15 @@ class PreferencesDialog(QDialog):
             self._interp_edits[lang] = edit
         interp_group.setLayout(interp_form)
 
+        exec_group = QGroupBox("Exécution")
+        exec_form = QFormLayout()
+        self._terminal_edit = QLineEdit(load_terminal())
+        self._terminal_edit.editingFinished.connect(
+            lambda: save_terminal(self._terminal_edit.text())
+        )
+        exec_form.addRow("Terminal :", self._terminal_edit)
+        exec_group.setLayout(exec_form)
+
         highlight_group = QGroupBox("Coloration syntaxique")
         highlight_layout = QVBoxLayout()
         self._light_combo, self._light_preview = self._style_row(
@@ -131,6 +141,7 @@ class PreferencesDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(display_group)
         layout.addWidget(interp_group)
+        layout.addWidget(exec_group)
         layout.addWidget(highlight_group)
         layout.addWidget(edit_group)
         layout.addStretch()

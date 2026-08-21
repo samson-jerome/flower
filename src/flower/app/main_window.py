@@ -3,7 +3,7 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QMainWindow, QSplitter, QMessageBox, QFileDialog, QLabel, QApplication,
 )
-from PySide6.QtCore import Qt, QSettings
+from PySide6.QtCore import Qt
 from flower.engine.api import FlowGraph
 from flower.engine.errors import GraphRuleError
 from flower.engine.models.node import Node, can_exec
@@ -15,8 +15,10 @@ from flower.app.notes_panel import NotesPanel, bind_notes_to_splitter
 from flower.app.vars_panel import VarsPanel
 from flower.app.editor.editor_window import EditorWindow
 from flower.app.preferences_dialog import PreferencesDialog
-from flower.app.theme import is_dark
-from flower.app.interpreters import load_interpreters
+from flower.app.prefs.theme import is_dark
+from flower.app.prefs.interpreters import load_interpreters
+from flower.app.prefs.recent import add_recent, clear_recent, load_recent, remove_recent
+from flower.app.prefs.terminal import load_terminal
 
 # (background, text) pairs, keyed by whether the app is currently dark.
 # Same palette as flower.app.editor.node_form, for visual consistency between
@@ -148,10 +150,12 @@ class MainWindow(QMainWindow):
     def _open_path(self, path: Path) -> None:
         if not path.exists():
             QMessageBox.warning(self, "Fichier introuvable", f"Le fichier n'existe plus :\n{path}")
-            self._remove_recent(path)
+            remove_recent(path)
+            self._refresh_recent_menu()
             return
         self._load(FlowGraph.open(path))
-        self._add_recent(path)
+        add_recent(path)
+        self._refresh_recent_menu()
 
     def _load(self, flow: FlowGraph) -> None:
         """Swap in a freshly opened or created flow and reset everything that
@@ -172,7 +176,8 @@ class MainWindow(QMainWindow):
         self._flow.save()
         self._update_title()
         self.statusBar().showMessage("Fichier sauvegardé", 3000)
-        self._add_recent(self._flow.path)
+        add_recent(self._flow.path)
+        self._refresh_recent_menu()
 
     def _save_as(self) -> None:
         path, _ = QFileDialog.getSaveFileName(self, "Sauver sous", "", "Flow files (*.flow)")
@@ -181,7 +186,8 @@ class MainWindow(QMainWindow):
         self._flow.save(Path(path if path.endswith(".flow") else path + ".flow"))
         self._update_title()
         self.statusBar().showMessage("Fichier sauvegardé", 3000)
-        self._add_recent(self._flow.path)
+        add_recent(self._flow.path)
+        self._refresh_recent_menu()
 
     def _generate_script(self) -> None:
         if not self._ensure_saved():
@@ -192,7 +198,7 @@ class MainWindow(QMainWindow):
     def _launch_script(self) -> None:
         if not self._ensure_saved():
             return
-        path = self._flow.run(interpreters=load_interpreters())
+        path = self._flow.run(interpreters=load_interpreters(), terminal=load_terminal())
         if path is not None:
             self.statusBar().showMessage(f"Script lancé : {path.name}", 3000)
         else:
@@ -231,7 +237,7 @@ class MainWindow(QMainWindow):
             ancestor = ancestor.parent
         if not self._ensure_saved():
             return
-        path = self._flow.run(node_id, interpreters=load_interpreters())
+        path = self._flow.run(node_id, interpreters=load_interpreters(), terminal=load_terminal())
         if path is not None:
             self.statusBar().showMessage(f"Exécution partielle : {path.name}", 3000)
         else:
@@ -388,35 +394,10 @@ class MainWindow(QMainWindow):
 
     # ── Helpers ──────────────────────────────────────────────────────────────
 
-    _MAX_RECENT = 20
-
-    def _recent_paths(self) -> list[str]:
-        settings = QSettings()
-        value = settings.value("recentFiles", [])
-        if isinstance(value, str):
-            value = [value]
-        return [str(v) for v in (value or []) if v]
-
-    def _save_recent_paths(self, paths: list[str]) -> None:
-        QSettings().setValue("recentFiles", paths)
-
-    def _add_recent(self, path: Path) -> None:
-        p = str(path.resolve())
-        items = [x for x in self._recent_paths() if x != p]
-        items.insert(0, p)
-        self._save_recent_paths(items[: self._MAX_RECENT])
-        self._refresh_recent_menu()
-
-    def _remove_recent(self, path: Path) -> None:
-        p = str(path.resolve())
-        items = [x for x in self._recent_paths() if x != p]
-        self._save_recent_paths(items)
-        self._refresh_recent_menu()
-
     def _refresh_recent_menu(self) -> None:
         menu = self._recent_menu
         menu.clear()
-        items = self._recent_paths()
+        items = load_recent()
         if not items:
             act = menu.addAction("(aucun)")
             act.setEnabled(False)
@@ -436,7 +417,7 @@ class MainWindow(QMainWindow):
         self._open_path(path)
 
     def _clear_recent(self) -> None:
-        self._save_recent_paths([])
+        clear_recent()
         self._refresh_recent_menu()
 
     def _update_status_node(self, node: Node) -> None:

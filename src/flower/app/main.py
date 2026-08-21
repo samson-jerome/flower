@@ -3,7 +3,7 @@ from pathlib import Path
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 from flower.app.main_window import MainWindow
-from flower.app.theme import apply_theme, load_theme, watch_system_theme
+from flower.app.prefs.theme import apply_theme, load_theme, watch_system_theme
 
 
 ICON_PATH = Path(__file__).resolve().parents[3] / "assets" / "app-icon.png"

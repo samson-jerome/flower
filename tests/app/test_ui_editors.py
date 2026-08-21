@@ -3,9 +3,9 @@ from PySide6.QtCore import Qt, QSettings
 from PySide6.QtTest import QTest
 from pygments.styles import get_style_by_name
 from pygments.token import Token
-from flower.app import indent as indent_mod
+from flower.app.prefs import indent as indent_mod
 from flower.engine.models.node import NodeType
-from flower.app import highlight_styles
+from flower.app.prefs import highlight_styles
 from flower.app.editor import highlighter as highlighter_mod
 from flower.app.editor.type_editors import (
     make_type_editor, DataEditor, ScriptEditor, LoopEditor,

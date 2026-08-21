@@ -4,8 +4,8 @@ from PySide6.QtWidgets import QApplication
 from pygments.lexers import get_lexer_by_name
 from pygments.styles import get_style_by_name
 from pygments.util import ClassNotFound
-from flower.app.highlight_styles import load_style
-from flower.app.theme import is_dark
+from flower.app.prefs.highlight_styles import load_style
+from flower.app.prefs.theme import is_dark
 
 # Language name that means "leave it as plain text".
 PLAIN = "text"

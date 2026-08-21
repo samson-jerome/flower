@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QRadioButton, QButtonGroup, QStackedWidget, QApplication,
 )
 from flower.engine.models.node import NodeType
-from flower.app import highlight_styles
+from flower.app.prefs import highlight_styles
 from flower.app.editor.code_edit import CodeEdit
 from flower.app.editor.highlighter import PygmentsHighlighter
 

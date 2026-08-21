@@ -1,8 +1,8 @@
 import pytest
 from PySide6.QtCore import QSettings
 from PySide6.QtGui import QPalette
-from flower.app import theme as theme_mod
-from flower.app.theme import Theme, apply_theme, load_theme, save_theme
+from flower.app.prefs import theme as theme_mod
+from flower.app.prefs.theme import Theme, apply_theme, load_theme, save_theme
 
 
 @pytest.fixture(scope="module")
