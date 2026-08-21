@@ -26,7 +26,7 @@ def _window(graph, flow_path, monkeypatch):
     appends every launched script path to."""
     launched = []
     monkeypatch.setattr(
-        main_window_module, "launch_in_terminal",
+        main_window_module, "run_script",
         lambda script_path: (launched.append(script_path), True)[1],
     )
     win = MainWindow()

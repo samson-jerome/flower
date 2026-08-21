@@ -20,7 +20,7 @@ from flower.engine.io.xml_writer import write_flow
 from flower.engine.io.xml_reader import read_flow
 from flower.app.interpreters import load_interpreters
 from flower.engine.execution.bash_generator import write_bash_script, write_timestamped_bash_script
-from flower.engine.execution.launcher import launch_in_terminal
+from flower.engine.execution.runner import run_script
 from flower.engine.execution.traversal import prune_to_node
 
 # (background, text) pairs, keyed by whether the app is currently dark.
@@ -235,7 +235,7 @@ class MainWindow(QMainWindow):
         script_path = write_timestamped_bash_script(
             self._graph, self._path, timestamp, interpreters=load_interpreters()
         )
-        if launch_in_terminal(script_path):
+        if run_script(script_path):
             self.statusBar().showMessage(f"Script lancé : {script_path.name}", 3000)
         else:
             QMessageBox.warning(
@@ -273,7 +273,7 @@ class MainWindow(QMainWindow):
             datetime.now().strftime("%Y%m%d-%H%M%S"),
             interpreters=load_interpreters(), label=node.name,
         )
-        if launch_in_terminal(script_path):
+        if run_script(script_path):
             self.statusBar().showMessage(f"Exécution partielle : {script_path.name}", 3000)
         else:
             QMessageBox.warning(
