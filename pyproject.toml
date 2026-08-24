@@ -9,7 +9,7 @@ dependencies = [
 ]
 
 [project.scripts]
-flower = "flower.main:main"
+flower = "flower.app.main:main"
 
 [build-system]
 requires = ["hatchling"]
