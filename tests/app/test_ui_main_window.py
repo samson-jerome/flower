@@ -1,9 +1,11 @@
 import uuid
+from PySide6.QtWidgets import QMessageBox
 from flower.engine import api as api_module
 from flower.engine.api import FlowGraph
 from flower.engine.models.graph import Graph
 from flower.engine.models.node import Node, NodeType
 from flower.app.main_window import MainWindow
+from flower.version import get_version
 
 
 def _script_node(name, executable=False, active=True):
@@ -130,3 +132,20 @@ def test_add_child_node_falls_back_to_a_root_on_a_stale_selection(qapp, tmp_path
 
     assert len(win._flow.graph.roots) == 1
     assert win._flow.graph.roots[0].parent is None
+
+
+def test_the_about_box_shows_the_version(qapp, tmp_path, monkeypatch):
+    """The About box is where someone looks for the version in a windowed
+    application launched from a desktop shortcut, with no terminal in sight."""
+    shown = []
+    monkeypatch.setattr(
+        QMessageBox, "about",
+        staticmethod(lambda parent, title, text: shown.append(text)),
+    )
+    win, _ = _window(Graph(), tmp_path / "demo.flow", monkeypatch)
+
+    win._show_about()
+
+    assert len(shown) == 1
+    assert get_version() in shown[0]
+    assert "Flower" in shown[0]
