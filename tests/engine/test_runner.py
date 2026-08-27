@@ -163,3 +163,19 @@ def test_open_editor_refuses_a_malformed_command(monkeypatch):
     assert runner.open_editor(Path("/tmp/flows"), editor='code "') is False
     assert created == []
 
+
+def test_running_ledger_is_shared_across_launcher_functions(monkeypatch):
+    """The zombie ledger (_running) is a single module-level list shared by
+    every launcher. A failure here would mean some launcher was given its own
+    list instead of appending to and reaping the shared _running -- so a
+    terminal opened by open_terminal() would never be polled by a later
+    run_script() call, and would linger as a zombie."""
+    created = []
+    _spy(monkeypatch, created)
+
+    runner.open_terminal(Path("/tmp/flows"))
+    runner.run_script(Path("/tmp/demo.sh"))
+
+    # The terminal launched by open_terminal() is polled by the run_script()
+    # call that follows, so both functions share the one _running list.
+    assert created[0].polls == 1
