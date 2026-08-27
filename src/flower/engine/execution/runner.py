@@ -72,10 +72,16 @@ def open_editor(path: Path, editor: str = DEFAULT_EDITOR) -> bool:
     The command is shlex-split, unlike `terminal`: an editor is commonly
     configured with arguments (`code -n`, `flatpak run com.visualstudio.code`).
     A blank command yields an empty argv, which would run the path itself as
-    the program, so it is refused outright.
+    the program, so it is refused outright. A malformed command -- an
+    unbalanced quote, which shlex.split() cannot parse -- is likewise a
+    configuration mistake, reported the same way as any other failed launch
+    rather than raised for the caller to handle.
     """
     _reap()
-    command = shlex.split(editor)
+    try:
+        command = shlex.split(editor)
+    except ValueError:
+        return False
     if not command:
         return False
     try:

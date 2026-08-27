@@ -152,3 +152,14 @@ def test_open_editor_returns_false_when_the_editor_is_missing(monkeypatch):
     monkeypatch.setattr(runner, "_running", [])
 
     assert runner.open_editor(Path("/tmp/flows")) is False
+
+
+def test_open_editor_refuses_a_malformed_command(monkeypatch):
+    """An unbalanced quote in the preference is a configuration mistake, not an
+    exception for the caller to handle: shlex.split would raise ValueError."""
+    created = []
+    _spy(monkeypatch, created)
+
+    assert runner.open_editor(Path("/tmp/flows"), editor='code "') is False
+    assert created == []
+
