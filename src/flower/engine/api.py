@@ -141,7 +141,10 @@ class FlowGraph:
     ) -> Node:
         """Append a new node under `parent_id`, or as a new root when it is
         None. `name` is made unique; omitting it falls back to "nouveau", the
-        name the toolbar and the canvas shortcut have always used."""
+        name the toolbar and the canvas shortcut have always used.
+
+        A child inherits its parent's activity and forces it open; a root has
+        no parent to inherit from and stays active."""
         parent = self._require(parent_id) if parent_id is not None else None
         if parent is not None:
             self._check_capacity(parent)
@@ -150,6 +153,14 @@ class FlowGraph:
             name=self.unique_name(name if name is not None else "nouveau"),
             type=type,
         )
+        if parent is not None:
+            # set_active() already carries a subtree down with its parent, and
+            # the generator drops everything under an inactive ancestor: an
+            # active child there would be a state no execution can reach.
+            node.is_active = parent.is_active
+            # Adding to a collapsed parent would hide the new node, so the
+            # parent expands: the result of the action has to be visible.
+            parent.is_collapsed = False
         self._attach(node, parent)
         self.mark_modified()
         return node
