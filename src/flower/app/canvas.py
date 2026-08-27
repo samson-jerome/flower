@@ -462,6 +462,12 @@ class GraphCanvas(QGraphicsView):
             self.refresh_layout()
         elif key == Qt.Key.Key_Delete:
             self.delete_requested.emit()
+        elif key == Qt.Key.Key_I:
+            self._on_active_toggled(node.id)
+        elif key == Qt.Key.Key_H:
+            # A leaf has no -/+ button: collapsing it would only dirty the file.
+            if node.children:
+                self._on_collapsed_toggled(node.id)
 
     def _select_sibling(self, node: Node, delta: int) -> None:
         siblings = node.parent.children if node.parent else self._flow.graph.roots
