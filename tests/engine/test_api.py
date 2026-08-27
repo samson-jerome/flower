@@ -4,7 +4,7 @@ from pathlib import Path
 from flower.engine import api as api_module
 from flower.engine.api import FlowGraph
 from flower.engine.errors import CycleError, MaxChildrenError
-from flower.engine.execution.runner import DEFAULT_TERMINAL
+from flower.engine.execution.runner import DEFAULT_EDITOR, DEFAULT_TERMINAL
 from flower.engine.models.graph import Graph
 from flower.engine.models.node import Node, NodeType
 
@@ -538,3 +538,29 @@ def test_open_terminal_defaults_to_the_engine_terminal(tmp_path, monkeypatch):
     FlowGraph(Graph(), tmp_path / "demo.flow").open_terminal()
 
     assert calls == [DEFAULT_TERMINAL]
+
+
+def test_open_editor_targets_the_work_dir(tmp_path, monkeypatch):
+    """The script is written next to the flow, so the folder holding it is the
+    work dir -- no second path to compute."""
+    calls = []
+    monkeypatch.setattr(
+        api_module, "open_editor",
+        lambda path, editor: (calls.append((path, editor)), True)[1],
+    )
+    flow = FlowGraph(Graph(), tmp_path / "demo.flow")
+
+    assert flow.open_editor(editor="subl") is True
+    assert calls == [(tmp_path, "subl")]
+
+
+def test_open_editor_defaults_to_the_engine_editor(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        api_module, "open_editor",
+        lambda path, editor: (calls.append(editor), True)[1],
+    )
+
+    FlowGraph(Graph(), tmp_path / "demo.flow").open_editor()
+
+    assert calls == [DEFAULT_EDITOR]

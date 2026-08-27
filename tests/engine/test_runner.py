@@ -111,3 +111,44 @@ def test_open_terminal_returns_false_when_the_terminal_is_missing(monkeypatch):
     monkeypatch.setattr(runner, "_running", [])
 
     assert runner.open_terminal(Path("/tmp/flows")) is False
+
+
+def test_open_editor_passes_the_path_to_the_editor(monkeypatch):
+    created = []
+    _spy(monkeypatch, created)
+
+    assert runner.open_editor(Path("/tmp/flows")) is True
+
+    assert created[0].argv == ["code", "/tmp/flows"]
+    assert created[0].kwargs["start_new_session"] is True
+
+
+def test_open_editor_splits_a_command_with_arguments(monkeypatch):
+    """An editor is commonly configured with arguments, unlike a terminal."""
+    created = []
+    _spy(monkeypatch, created)
+
+    runner.open_editor(Path("/tmp/flows"), editor="flatpak run com.visualstudio.code -n")
+
+    assert created[0].argv == [
+        "flatpak", "run", "com.visualstudio.code", "-n", "/tmp/flows",
+    ]
+
+
+def test_open_editor_refuses_a_blank_command(monkeypatch):
+    """Without this guard the split would yield an empty argv and the path
+    itself would be executed as the program."""
+    created = []
+    _spy(monkeypatch, created)
+
+    assert runner.open_editor(Path("/tmp/flows"), editor="   ") is False
+    assert created == []
+
+
+def test_open_editor_returns_false_when_the_editor_is_missing(monkeypatch):
+    def boom(argv, **kwargs):
+        raise FileNotFoundError(argv[0])
+    monkeypatch.setattr(subprocess, "Popen", boom)
+    monkeypatch.setattr(runner, "_running", [])
+
+    assert runner.open_editor(Path("/tmp/flows")) is False

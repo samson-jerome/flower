@@ -8,7 +8,9 @@ from flower.engine.errors import CycleError, MaxChildrenError
 from flower.engine.execution.bash_generator import (
     generate_bash_script, write_bash_script, write_timestamped_bash_script,
 )
-from flower.engine.execution.runner import DEFAULT_TERMINAL, open_terminal, run_script
+from flower.engine.execution.runner import (
+    DEFAULT_EDITOR, DEFAULT_TERMINAL, open_editor, open_terminal, run_script,
+)
 from flower.engine.execution.traversal import prune_to_node
 from flower.engine.io.xml_reader import read_flow
 from flower.engine.io.xml_writer import write_flow
@@ -329,4 +331,12 @@ class FlowGraph:
         here, not an error."""
         return open_terminal(
             self.work_dir(), terminal if terminal is not None else DEFAULT_TERMINAL
+        )
+
+    def open_editor(self, editor: str | None = None) -> bool:
+        """Open work_dir() in the configured editor. Returns whether it
+        started -- write_script() puts the script in that same folder, so
+        opening it is what shows the generated script."""
+        return open_editor(
+            self.work_dir(), editor if editor is not None else DEFAULT_EDITOR
         )

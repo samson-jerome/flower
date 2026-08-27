@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 
 DEFAULT_TERMINAL = "x-terminal-emulator"
+DEFAULT_EDITOR   = "code"
 
 # Terminals started so far, kept only to poll() them on the next launch.
 # Popen keeps this process as their parent, so a terminal the user closes
@@ -58,6 +59,27 @@ def open_terminal(directory: Path, terminal: str = DEFAULT_TERMINAL) -> bool:
         process = subprocess.Popen(
             [terminal], cwd=str(directory), start_new_session=True
         )
+    except OSError:
+        return False
+    _running.append(process)
+    return True
+
+
+def open_editor(path: Path, editor: str = DEFAULT_EDITOR) -> bool:
+    """Open `path` -- a folder -- in a detached editor process. Returns
+    whether the editor was started.
+
+    The command is shlex-split, unlike `terminal`: an editor is commonly
+    configured with arguments (`code -n`, `flatpak run com.visualstudio.code`).
+    A blank command yields an empty argv, which would run the path itself as
+    the program, so it is refused outright.
+    """
+    _reap()
+    command = shlex.split(editor)
+    if not command:
+        return False
+    try:
+        process = subprocess.Popen(command + [str(path)], start_new_session=True)
     except OSError:
         return False
     _running.append(process)
