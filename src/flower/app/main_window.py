@@ -107,6 +107,8 @@ class MainWindow(QMainWindow):
         exec_menu.addSeparator()
         exec_menu.addAction("Exporter en .dot",             self._export_dot)
         exec_menu.addAction("Exporter en .dot (actifs)",    self._export_dot_active)
+        exec_menu.addSeparator()
+        exec_menu.addAction("Ouvrir un terminal ici", self._open_terminal, "Alt+O")
 
         help_menu = self.menuBar().addMenu("Aide")
         help_menu.addAction("À propos de Flower", self._show_about)
@@ -218,6 +220,18 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(
                 self, "Échec du lancement",
                 "Impossible d'ouvrir un terminal pour exécuter le script.",
+            )
+
+    def _open_terminal(self) -> None:
+        """No _ensure_saved(): an unsaved flow opens the current directory,
+        which is precisely what this shortcut is for."""
+        terminal = load_terminal()
+        if self._flow.open_terminal(terminal=terminal):
+            self.statusBar().showMessage(f"Terminal ouvert : {self._flow.work_dir()}", 3000)
+        else:
+            QMessageBox.warning(
+                self, "Échec du lancement",
+                f"Impossible d'ouvrir le terminal « {terminal} ».",
             )
 
     def _export_dot(self) -> None:

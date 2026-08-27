@@ -1,3 +1,4 @@
+from pathlib import Path
 import uuid
 from PySide6.QtWidgets import QMessageBox
 from flower.engine import api as api_module
@@ -164,3 +165,49 @@ def test_the_about_box_shows_the_version(qapp, tmp_path, monkeypatch):
     assert len(shown) == 1
     assert get_version() in shown[0]
     assert "Flower" in shown[0]
+
+
+def test_the_terminal_action_opens_the_flow_folder(qapp, tmp_path, monkeypatch):
+    """Goes through the "Exécution" menu action, so the shortcut's whole path
+    from the menu entry to the runner is protected, not just the handler."""
+    opened = []
+    monkeypatch.setattr(
+        api_module, "open_terminal",
+        lambda directory, terminal: (opened.append((directory, terminal)), True)[1],
+    )
+    # The handler reads the real QSettings otherwise, so a developer with a
+    # saved Terminal preference would fail this test.
+    monkeypatch.setattr(
+        "flower.app.main_window.load_terminal", lambda: "x-terminal-emulator"
+    )
+    win, _ = _window(Graph(), tmp_path / "demo.flow", monkeypatch)
+
+    menu_bar_actions = win.menuBar().actions()
+    exec_action = next(a for a in menu_bar_actions if a.text() == "Exécution")
+    exec_menu = exec_action.menu()
+    terminal_entry = next(
+        a for a in exec_menu.actions() if a.text() == "Ouvrir un terminal ici"
+    )
+
+    terminal_entry.trigger()
+
+    assert opened == [(tmp_path, "x-terminal-emulator")]
+
+
+def test_the_terminal_action_needs_no_saved_file(qapp, tmp_path, monkeypatch):
+    """The unsaved case is the point of the shortcut: it must not pop the
+    "Sauver sous" dialog, which would block the test."""
+    opened = []
+    monkeypatch.setattr(
+        api_module, "open_terminal",
+        lambda directory, terminal: (opened.append(directory), True)[1],
+    )
+    monkeypatch.setattr(
+        "flower.app.main_window.load_terminal", lambda: "x-terminal-emulator"
+    )
+    monkeypatch.chdir(tmp_path)
+    win, _ = _window(Graph(), None, monkeypatch)
+
+    win._open_terminal()
+
+    assert opened == [Path.cwd()]
