@@ -1,5 +1,6 @@
 import uuid
-from PySide6.QtCore import QPointF, QPoint
+from PySide6.QtCore import QPointF, QPoint, QEvent, Qt
+from PySide6.QtGui import QKeyEvent
 from flower.engine.api import FlowGraph
 from flower.engine.models.graph import Graph
 from flower.engine.models.node import Node, NodeType
@@ -181,3 +182,31 @@ def test_press_on_the_node_body_still_arms_a_drag(qapp):
         QPointF(rect.left() + 60.0, rect.center().y()), QPoint(0, 0)
     )
     assert canvas._drag_candidate_id == node.id
+
+
+def _key(key, mod=Qt.KeyboardModifier.NoModifier):
+    return QKeyEvent(QEvent.Type.KeyPress, key, mod)
+
+
+def test_c_emits_add_child_when_nothing_is_selected(qapp):
+    """Without a selection the handler used to return before reaching the C
+    branch, so the only way to create a first root was the toolbar."""
+    canvas, _ = _canvas()
+    received = []
+    canvas.add_child_requested.connect(lambda: received.append(True))
+
+    canvas._handle_nav_key(_key(Qt.Key.Key_C))
+
+    assert received == [True]
+
+
+def test_c_still_emits_add_child_with_a_selection(qapp):
+    root = _node("root")
+    canvas, _ = _canvas(root)
+    canvas.select_node(root.id)
+    received = []
+    canvas.add_child_requested.connect(lambda: received.append(True))
+
+    canvas._handle_nav_key(_key(Qt.Key.Key_C))
+
+    assert received == [True]

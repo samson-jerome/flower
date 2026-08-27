@@ -428,13 +428,21 @@ class GraphCanvas(QGraphicsView):
         super().keyReleaseEvent(event)
 
     def _handle_nav_key(self, event: QKeyEvent) -> None:
-        if self._flow is None or self._selected_id is None:
+        if self._flow is None:
+            return
+        key = event.key()
+        mod = event.modifiers()
+
+        # Creating a node needs no selection: without one it adds a root.
+        if key == Qt.Key.Key_C:
+            self.add_child_requested.emit()
+            return
+
+        if self._selected_id is None:
             return
         node = self._flow.find(self._selected_id)
         if node is None:
             return
-        key = event.key()
-        mod = event.modifiers()
 
         if key == Qt.Key.Key_Up and mod == Qt.KeyboardModifier.NoModifier:
             self._select_sibling(node, -1)
@@ -452,8 +460,6 @@ class GraphCanvas(QGraphicsView):
             self._reorder_sibling(node, +1)
         elif key == Qt.Key.Key_R:
             self.refresh_layout()
-        elif key == Qt.Key.Key_C:
-            self.add_child_requested.emit()
         elif key == Qt.Key.Key_Delete:
             self.delete_requested.emit()
 
