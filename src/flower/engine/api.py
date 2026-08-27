@@ -8,7 +8,7 @@ from flower.engine.errors import CycleError, MaxChildrenError
 from flower.engine.execution.bash_generator import (
     generate_bash_script, write_bash_script, write_timestamped_bash_script,
 )
-from flower.engine.execution.runner import DEFAULT_TERMINAL, run_script
+from flower.engine.execution.runner import DEFAULT_TERMINAL, open_terminal, run_script
 from flower.engine.execution.traversal import prune_to_node
 from flower.engine.io.xml_reader import read_flow
 from flower.engine.io.xml_writer import write_flow
@@ -21,7 +21,8 @@ class FlowGraph:
 
     The only public entry point of the engine. Holds the modified flag so no
     caller has to remember to raise it, and is the only module of the engine
-    allowed to read the clock (see save() and write_run_script()).
+    allowed to read the clock and the current directory (see save(),
+    write_run_script() and work_dir()).
 
     Structural changes -- a node's existence, its relations, its states --
     go through these methods. A node's own content (name aside, plus
@@ -109,6 +110,14 @@ class FlowGraph:
         if self.path is None:
             raise ValueError("this flow has no path: nowhere to write next to it")
         return self.path
+
+    def work_dir(self) -> Path:
+        """The folder the flow lives in, or the process's current directory
+        when it has never been saved.
+
+        The one place that rule is written: the terminal and the editor both
+        open here, and a generated script is written here too."""
+        return self.path.parent if self.path is not None else Path.cwd()
 
     def unique_name(self, base: str) -> str:
         """`base` if no node bears it, else base_1, base_2... Only new nodes
@@ -313,3 +322,11 @@ class FlowGraph:
         script_path = self.write_run_script(from_node_id, interpreters)
         started = run_script(script_path, terminal if terminal is not None else DEFAULT_TERMINAL)
         return script_path if started else None
+
+    def open_terminal(self, terminal: str | None = None) -> bool:
+        """Open a terminal in work_dir(). Returns whether it started -- the
+        caller is what tells the user, and an unsaved flow is a normal case
+        here, not an error."""
+        return open_terminal(
+            self.work_dir(), terminal if terminal is not None else DEFAULT_TERMINAL
+        )

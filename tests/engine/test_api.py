@@ -1,5 +1,7 @@
 import uuid
 import pytest
+from pathlib import Path
+from flower.engine import api as api_module
 from flower.engine.api import FlowGraph
 from flower.engine.errors import CycleError, MaxChildrenError
 from flower.engine.execution.runner import DEFAULT_TERMINAL
@@ -498,3 +500,41 @@ def test_export_dot_on_an_unsaved_flow_raises():
     flow = FlowGraph(Graph(roots=[_node("root")]))
     with pytest.raises(ValueError):
         flow.export_dot()
+
+
+def test_work_dir_is_the_folder_of_the_flow(tmp_path):
+    flow = FlowGraph(Graph(), tmp_path / "demo.flow")
+
+    assert flow.work_dir() == tmp_path
+
+
+def test_work_dir_falls_back_to_the_current_directory(tmp_path, monkeypatch):
+    """An unsaved flow has no folder of its own; the process's directory is
+    where the user launched the application from."""
+    monkeypatch.chdir(tmp_path)
+
+    assert FlowGraph.new().work_dir() == Path.cwd()
+
+
+def test_open_terminal_targets_the_work_dir(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        api_module, "open_terminal",
+        lambda directory, terminal: (calls.append((directory, terminal)), True)[1],
+    )
+    flow = FlowGraph(Graph(), tmp_path / "demo.flow")
+
+    assert flow.open_terminal(terminal="kitty") is True
+    assert calls == [(tmp_path, "kitty")]
+
+
+def test_open_terminal_defaults_to_the_engine_terminal(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        api_module, "open_terminal",
+        lambda directory, terminal: (calls.append(terminal), True)[1],
+    )
+
+    FlowGraph(Graph(), tmp_path / "demo.flow").open_terminal()
+
+    assert calls == [DEFAULT_TERMINAL]

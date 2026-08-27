@@ -43,3 +43,22 @@ def run_script(script_path: Path, terminal: str = DEFAULT_TERMINAL) -> bool:
         return False
     _running.append(process)
     return True
+
+
+def open_terminal(directory: Path, terminal: str = DEFAULT_TERMINAL) -> bool:
+    """Open a new detached terminal window with `directory` as its working
+    directory. Returns whether the terminal process was started.
+
+    No `-e` here, unlike run_script(): this opens an interactive shell for the
+    user to type in, not a command. Detaching and reaping work exactly as they
+    do for a script launch, and the process joins the same _running list.
+    """
+    _reap()
+    try:
+        process = subprocess.Popen(
+            [terminal], cwd=str(directory), start_new_session=True
+        )
+    except OSError:
+        return False
+    _running.append(process)
+    return True

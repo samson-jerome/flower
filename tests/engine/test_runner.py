@@ -81,3 +81,33 @@ def test_run_script_reaps_previous_launches(monkeypatch):
     # The first launch is polled by the second, so a finished terminal does
     # not linger as a zombie for the lifetime of the application.
     assert created[0].polls == 1
+
+
+def test_open_terminal_spawns_the_terminal_in_the_directory(monkeypatch):
+    created = []
+    _spy(monkeypatch, created)
+
+    assert runner.open_terminal(Path("/tmp/flows")) is True
+
+    # No -e: this opens an interactive shell, not a command.
+    assert created[0].argv == ["x-terminal-emulator"]
+    assert created[0].kwargs["cwd"] == "/tmp/flows"
+    assert created[0].kwargs["start_new_session"] is True
+
+
+def test_open_terminal_honours_a_custom_terminal(monkeypatch):
+    created = []
+    _spy(monkeypatch, created)
+
+    runner.open_terminal(Path("/tmp/flows"), terminal="kitty")
+
+    assert created[0].argv == ["kitty"]
+
+
+def test_open_terminal_returns_false_when_the_terminal_is_missing(monkeypatch):
+    def boom(argv, **kwargs):
+        raise FileNotFoundError(argv[0])
+    monkeypatch.setattr(subprocess, "Popen", boom)
+    monkeypatch.setattr(runner, "_running", [])
+
+    assert runner.open_terminal(Path("/tmp/flows")) is False
