@@ -19,6 +19,7 @@ from flower.app.prefs.theme import is_dark
 from flower.app.prefs.interpreters import load_interpreters
 from flower.app.prefs.recent import add_recent, clear_recent, load_recent, remove_recent
 from flower.app.prefs.terminal import load_terminal
+from flower.version import get_version
 
 # (background, text) pairs, keyed by whether the app is currently dark.
 # Same palette as flower.app.editor.node_form, for visual consistency between
@@ -107,8 +108,17 @@ class MainWindow(QMainWindow):
         exec_menu.addAction("Exporter en .dot",             self._export_dot)
         exec_menu.addAction("Exporter en .dot (actifs)",    self._export_dot_active)
 
+        help_menu = self.menuBar().addMenu("Aide")
+        help_menu.addAction("À propos de Flower", self._show_about)
+
     def _open_preferences(self) -> None:
         PreferencesDialog(self).exec()
+
+    def _show_about(self) -> None:
+        QMessageBox.about(
+            self, "À propos de Flower",
+            f"<b>Flower</b> {get_version()}<br><br>Éditeur de graphes d'exécution.",
+        )
 
     def _connect_signals(self) -> None:
         self._canvas.node_selected.connect(self._on_node_selected)

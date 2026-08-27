@@ -1,9 +1,11 @@
 import uuid
+from PySide6.QtWidgets import QMessageBox
 from flower.engine import api as api_module
 from flower.engine.api import FlowGraph
 from flower.engine.models.graph import Graph
 from flower.engine.models.node import Node, NodeType
 from flower.app.main_window import MainWindow
+from flower.version import get_version
 
 
 def _script_node(name, executable=False, active=True):
@@ -130,3 +132,35 @@ def test_add_child_node_falls_back_to_a_root_on_a_stale_selection(qapp, tmp_path
 
     assert len(win._flow.graph.roots) == 1
     assert win._flow.graph.roots[0].parent is None
+
+
+def test_the_about_box_shows_the_version(qapp, tmp_path, monkeypatch):
+    """The About box is where someone looks for the version in a windowed
+    application launched from a desktop shortcut, with no terminal in sight.
+
+    Goes through the "Aide" menu's "À propos de Flower" action rather than
+    calling _show_about() directly, so this protects the full path from the
+    menu entry to the handler, not just the handler in isolation. The two
+    next() calls look the menu and action up by label, not by position, and
+    raise StopIteration outright if either is missing or mislabeled."""
+    shown = []
+    monkeypatch.setattr(
+        QMessageBox, "about",
+        staticmethod(lambda parent, title, text: shown.append(text)),
+    )
+    win, _ = _window(Graph(), tmp_path / "demo.flow", monkeypatch)
+
+    # Building help_menu in two steps (rather than chaining a.menu() straight
+    # into the generator expression) keeps a live Python reference to the
+    # QAction throughout the lookup — PySide/Shiboken has been observed to
+    # free the underlying QMenu prematurely otherwise.
+    menu_bar_actions = win.menuBar().actions()
+    help_action = next(a for a in menu_bar_actions if a.text() == "Aide")
+    help_menu = help_action.menu()
+    about = next(a for a in help_menu.actions() if a.text() == "À propos de Flower")
+
+    about.trigger()
+
+    assert len(shown) == 1
+    assert get_version() in shown[0]
+    assert "Flower" in shown[0]
