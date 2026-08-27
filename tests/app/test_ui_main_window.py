@@ -211,3 +211,46 @@ def test_the_terminal_action_needs_no_saved_file(qapp, tmp_path, monkeypatch):
     win._open_terminal()
 
     assert opened == [Path.cwd()]
+
+
+def test_generate_script_opens_the_folder_in_the_editor(qapp, tmp_path, monkeypatch):
+    """Goes through the "Exécution" menu action, so the Alt+G path is covered
+    from the menu entry down to the runner."""
+    opened = []
+    monkeypatch.setattr(
+        api_module, "open_editor",
+        lambda path, editor: (opened.append((path, editor)), True)[1],
+    )
+    # Same reason as the terminal action: the handler must not depend on the
+    # developer's saved Éditeur preference.
+    monkeypatch.setattr("flower.app.main_window.load_editor", lambda: "code")
+    win, _ = _window(Graph(roots=[_script_node("root")]), tmp_path / "demo.flow", monkeypatch)
+
+    menu_bar_actions = win.menuBar().actions()
+    exec_action = next(a for a in menu_bar_actions if a.text() == "Exécution")
+    exec_menu = exec_action.menu()
+    generate = next(a for a in exec_menu.actions() if a.text() == "Générer le script")
+
+    generate.trigger()
+
+    assert (tmp_path / "demo.sh").exists()
+    assert opened == [(tmp_path, "code")]
+
+
+def test_a_failing_editor_does_not_lose_the_generated_script(qapp, tmp_path, monkeypatch):
+    """The script was written even when the editor command is missing, so the
+    warning must not read as a failed generation."""
+    warned = []
+    monkeypatch.setattr(api_module, "open_editor", lambda path, editor: False)
+    monkeypatch.setattr("flower.app.main_window.load_editor", lambda: "code")
+    monkeypatch.setattr(
+        QMessageBox, "warning",
+        staticmethod(lambda parent, title, text: warned.append(text)),
+    )
+    win, _ = _window(Graph(roots=[_script_node("root")]), tmp_path / "demo.flow", monkeypatch)
+
+    win._generate_script()
+
+    assert (tmp_path / "demo.sh").exists()
+    assert len(warned) == 1
+    assert "code" in warned[0]

@@ -19,6 +19,7 @@ from flower.app.prefs.theme import is_dark
 from flower.app.prefs.interpreters import load_interpreters
 from flower.app.prefs.recent import add_recent, clear_recent, load_recent, remove_recent
 from flower.app.prefs.terminal import load_terminal
+from flower.app.prefs.editor import load_editor
 from flower.version import get_version
 
 # (background, text) pairs, keyed by whether the app is currently dark.
@@ -102,7 +103,7 @@ class MainWindow(QMainWindow):
         file_menu.addAction("Quitter",       self.close,      "Ctrl+Q")
 
         exec_menu = self.menuBar().addMenu("Exécution")
-        exec_menu.addAction("Générer le script", self._generate_script)
+        exec_menu.addAction("Générer le script", self._generate_script, "Alt+G")
         exec_menu.addAction("Lancer le script",  self._launch_script, "Alt+R")
         exec_menu.addSeparator()
         exec_menu.addAction("Exporter en .dot",             self._export_dot)
@@ -208,7 +209,15 @@ class MainWindow(QMainWindow):
         if not self._ensure_saved():
             return
         path = self._flow.write_script(interpreters=load_interpreters())
+        # The script exists from here on, so its success is reported first: a
+        # missing editor command must not read as a failed generation.
         self.statusBar().showMessage(f"Script généré : {path.name}", 3000)
+        editor = load_editor()
+        if not self._flow.open_editor(editor=editor):
+            QMessageBox.warning(
+                self, "Échec de l'ouverture",
+                f"Impossible de lancer l'éditeur « {editor} ».",
+            )
 
     def _launch_script(self) -> None:
         if not self._ensure_saved():
