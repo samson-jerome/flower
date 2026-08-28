@@ -1,5 +1,7 @@
+from pathlib import Path
 import uuid
 from PySide6.QtWidgets import QMessageBox
+from PySide6.QtTest import QTest
 from flower.engine import api as api_module
 from flower.engine.api import FlowGraph
 from flower.engine.models.graph import Graph
@@ -134,6 +136,29 @@ def test_add_child_node_falls_back_to_a_root_on_a_stale_selection(qapp, tmp_path
     assert win._flow.graph.roots[0].parent is None
 
 
+def test_bare_nav_keys_type_into_the_description_instead_of_the_canvas(qapp, tmp_path, monkeypatch):
+    """c, i and h are bare keys precisely so they type a literal character
+    when focus is in a text field instead of mutating the graph. This has to
+    go through the real widget tree -- MainWindow, so the Description panel
+    and the canvas share one focus/event scope -- and QTest.keyClicks(), which
+    delivers key events straight to the target widget the way the windowing
+    system would once that widget holds keyboard focus. Calling
+    canvas._handle_nav_key() directly (as the other c/i/h tests do) would
+    bypass this routing question entirely."""
+    root = _link(_script_node("root"), [_script_node("child")])
+    win, _ = _window(Graph(roots=[root]), tmp_path / "demo.flow", monkeypatch)
+    win._canvas.select_node(root.id)
+
+    QTest.keyClicks(win._notes._editor, "chi")
+
+    assert win._notes.text() == "chi"
+    # None of the three keys reached GraphCanvas.keyPressEvent: no root was
+    # added, and the selected node's active/collapsed state is untouched.
+    assert win._flow.graph.roots == [root]
+    assert root.is_active is True
+    assert root.is_collapsed is False
+
+
 def test_the_about_box_shows_the_version(qapp, tmp_path, monkeypatch):
     """The About box is where someone looks for the version in a windowed
     application launched from a desktop shortcut, with no terminal in sight.
@@ -164,3 +189,113 @@ def test_the_about_box_shows_the_version(qapp, tmp_path, monkeypatch):
     assert len(shown) == 1
     assert get_version() in shown[0]
     assert "Flower" in shown[0]
+
+
+def test_the_terminal_action_opens_the_flow_folder(qapp, tmp_path, monkeypatch):
+    """Goes through the "Exécution" menu action, so the shortcut's whole path
+    from the menu entry to the runner is protected, not just the handler."""
+    opened = []
+    monkeypatch.setattr(
+        api_module, "open_terminal",
+        lambda directory, terminal: (opened.append((directory, terminal)), True)[1],
+    )
+    # The handler reads the real QSettings otherwise, so a developer with a
+    # saved Terminal preference would fail this test.
+    monkeypatch.setattr(
+        "flower.app.main_window.load_terminal", lambda: "x-terminal-emulator"
+    )
+    win, _ = _window(Graph(), tmp_path / "demo.flow", monkeypatch)
+
+    menu_bar_actions = win.menuBar().actions()
+    exec_action = next(a for a in menu_bar_actions if a.text() == "Exécution")
+    exec_menu = exec_action.menu()
+    terminal_entry = next(
+        a for a in exec_menu.actions() if a.text() == "Ouvrir un terminal ici"
+    )
+
+    terminal_entry.trigger()
+
+    assert opened == [(tmp_path, "x-terminal-emulator")]
+
+
+def test_the_terminal_action_needs_no_saved_file(qapp, tmp_path, monkeypatch):
+    """The unsaved case is the point of the shortcut: it must not pop the
+    "Sauver sous" dialog, which would block the test."""
+    opened = []
+    monkeypatch.setattr(
+        api_module, "open_terminal",
+        lambda directory, terminal: (opened.append(directory), True)[1],
+    )
+    monkeypatch.setattr(
+        "flower.app.main_window.load_terminal", lambda: "x-terminal-emulator"
+    )
+    monkeypatch.chdir(tmp_path)
+    win, _ = _window(Graph(), None, monkeypatch)
+
+    win._open_terminal()
+
+    assert opened == [Path.cwd()]
+
+
+def test_a_failing_terminal_shows_a_warning_naming_the_command(qapp, tmp_path, monkeypatch):
+    """Mirrors test_a_failing_editor_does_not_lose_the_generated_script: the
+    terminal launcher has the same failure-reporting contract as the editor
+    one, but nothing exercised it yet."""
+    warned = []
+    monkeypatch.setattr(api_module, "open_terminal", lambda directory, terminal: False)
+    monkeypatch.setattr(
+        "flower.app.main_window.load_terminal", lambda: "x-terminal-emulator"
+    )
+    monkeypatch.setattr(
+        QMessageBox, "warning",
+        staticmethod(lambda parent, title, text: warned.append(text)),
+    )
+    win, _ = _window(Graph(), tmp_path / "demo.flow", monkeypatch)
+
+    win._open_terminal()
+
+    assert len(warned) == 1
+    assert "x-terminal-emulator" in warned[0]
+
+
+def test_generate_script_opens_the_folder_in_the_editor(qapp, tmp_path, monkeypatch):
+    """Goes through the "Exécution" menu action, so the Alt+G path is covered
+    from the menu entry down to the runner."""
+    opened = []
+    monkeypatch.setattr(
+        api_module, "open_editor",
+        lambda path, editor: (opened.append((path, editor)), True)[1],
+    )
+    # Same reason as the terminal action: the handler must not depend on the
+    # developer's saved Éditeur preference.
+    monkeypatch.setattr("flower.app.main_window.load_editor", lambda: "code")
+    win, _ = _window(Graph(roots=[_script_node("root")]), tmp_path / "demo.flow", monkeypatch)
+
+    menu_bar_actions = win.menuBar().actions()
+    exec_action = next(a for a in menu_bar_actions if a.text() == "Exécution")
+    exec_menu = exec_action.menu()
+    generate = next(a for a in exec_menu.actions() if a.text() == "Générer le script")
+
+    generate.trigger()
+
+    assert (tmp_path / "demo.sh").exists()
+    assert opened == [(tmp_path, "code")]
+
+
+def test_a_failing_editor_does_not_lose_the_generated_script(qapp, tmp_path, monkeypatch):
+    """The script was written even when the editor command is missing, so the
+    warning must not read as a failed generation."""
+    warned = []
+    monkeypatch.setattr(api_module, "open_editor", lambda path, editor: False)
+    monkeypatch.setattr("flower.app.main_window.load_editor", lambda: "code")
+    monkeypatch.setattr(
+        QMessageBox, "warning",
+        staticmethod(lambda parent, title, text: warned.append(text)),
+    )
+    win, _ = _window(Graph(roots=[_script_node("root")]), tmp_path / "demo.flow", monkeypatch)
+
+    win._generate_script()
+
+    assert (tmp_path / "demo.sh").exists()
+    assert len(warned) == 1
+    assert "code" in warned[0]

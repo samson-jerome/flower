@@ -81,3 +81,101 @@ def test_run_script_reaps_previous_launches(monkeypatch):
     # The first launch is polled by the second, so a finished terminal does
     # not linger as a zombie for the lifetime of the application.
     assert created[0].polls == 1
+
+
+def test_open_terminal_spawns_the_terminal_in_the_directory(monkeypatch):
+    created = []
+    _spy(monkeypatch, created)
+
+    assert runner.open_terminal(Path("/tmp/flows")) is True
+
+    # No -e: this opens an interactive shell, not a command.
+    assert created[0].argv == ["x-terminal-emulator"]
+    assert created[0].kwargs["cwd"] == "/tmp/flows"
+    assert created[0].kwargs["start_new_session"] is True
+
+
+def test_open_terminal_honours_a_custom_terminal(monkeypatch):
+    created = []
+    _spy(monkeypatch, created)
+
+    runner.open_terminal(Path("/tmp/flows"), terminal="kitty")
+
+    assert created[0].argv == ["kitty"]
+
+
+def test_open_terminal_returns_false_when_the_terminal_is_missing(monkeypatch):
+    def boom(argv, **kwargs):
+        raise FileNotFoundError(argv[0])
+    monkeypatch.setattr(subprocess, "Popen", boom)
+    monkeypatch.setattr(runner, "_running", [])
+
+    assert runner.open_terminal(Path("/tmp/flows")) is False
+
+
+def test_open_editor_passes_the_path_to_the_editor(monkeypatch):
+    created = []
+    _spy(monkeypatch, created)
+
+    assert runner.open_editor(Path("/tmp/flows")) is True
+
+    assert created[0].argv == ["code", "/tmp/flows"]
+    assert created[0].kwargs["start_new_session"] is True
+
+
+def test_open_editor_splits_a_command_with_arguments(monkeypatch):
+    """An editor is commonly configured with arguments, unlike a terminal."""
+    created = []
+    _spy(monkeypatch, created)
+
+    runner.open_editor(Path("/tmp/flows"), editor="flatpak run com.visualstudio.code -n")
+
+    assert created[0].argv == [
+        "flatpak", "run", "com.visualstudio.code", "-n", "/tmp/flows",
+    ]
+
+
+def test_open_editor_refuses_a_blank_command(monkeypatch):
+    """Without this guard the split would yield an empty argv and the path
+    itself would be executed as the program."""
+    created = []
+    _spy(monkeypatch, created)
+
+    assert runner.open_editor(Path("/tmp/flows"), editor="   ") is False
+    assert created == []
+
+
+def test_open_editor_returns_false_when_the_editor_is_missing(monkeypatch):
+    def boom(argv, **kwargs):
+        raise FileNotFoundError(argv[0])
+    monkeypatch.setattr(subprocess, "Popen", boom)
+    monkeypatch.setattr(runner, "_running", [])
+
+    assert runner.open_editor(Path("/tmp/flows")) is False
+
+
+def test_open_editor_refuses_a_malformed_command(monkeypatch):
+    """An unbalanced quote in the preference is a configuration mistake, not an
+    exception for the caller to handle: shlex.split would raise ValueError."""
+    created = []
+    _spy(monkeypatch, created)
+
+    assert runner.open_editor(Path("/tmp/flows"), editor='code "') is False
+    assert created == []
+
+
+def test_running_ledger_is_shared_across_launcher_functions(monkeypatch):
+    """The zombie ledger (_running) is a single module-level list shared by
+    every launcher. A failure here would mean some launcher was given its own
+    list instead of appending to and reaping the shared _running -- so a
+    terminal opened by open_terminal() would never be polled by a later
+    run_script() call, and would linger as a zombie."""
+    created = []
+    _spy(monkeypatch, created)
+
+    runner.open_terminal(Path("/tmp/flows"))
+    runner.run_script(Path("/tmp/demo.sh"))
+
+    # The terminal launched by open_terminal() is polled by the run_script()
+    # call that follows, so both functions share the one _running list.
+    assert created[0].polls == 1

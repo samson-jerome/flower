@@ -8,7 +8,9 @@ from flower.engine.errors import CycleError, MaxChildrenError
 from flower.engine.execution.bash_generator import (
     generate_bash_script, write_bash_script, write_timestamped_bash_script,
 )
-from flower.engine.execution.runner import DEFAULT_TERMINAL, run_script
+from flower.engine.execution.runner import (
+    DEFAULT_EDITOR, DEFAULT_TERMINAL, open_editor, open_terminal, run_script,
+)
 from flower.engine.execution.traversal import prune_to_node
 from flower.engine.io.xml_reader import read_flow
 from flower.engine.io.xml_writer import write_flow
@@ -21,7 +23,8 @@ class FlowGraph:
 
     The only public entry point of the engine. Holds the modified flag so no
     caller has to remember to raise it, and is the only module of the engine
-    allowed to read the clock (see save() and write_run_script()).
+    allowed to read the clock and the current directory (see save(),
+    write_run_script() and work_dir()).
 
     Structural changes -- a node's existence, its relations, its states --
     go through these methods. A node's own content (name aside, plus
@@ -110,6 +113,14 @@ class FlowGraph:
             raise ValueError("this flow has no path: nowhere to write next to it")
         return self.path
 
+    def work_dir(self) -> Path:
+        """The folder the flow lives in, or the process's current directory
+        when it has never been saved.
+
+        The one place that rule is written: the terminal and the editor both
+        open here, and a generated script is written here too."""
+        return self.path.parent if self.path is not None else Path.cwd()
+
     def unique_name(self, base: str) -> str:
         """`base` if no node bears it, else base_1, base_2... Only new nodes
         get a unique name; renaming does not enforce uniqueness, so duplicate
@@ -130,7 +141,10 @@ class FlowGraph:
     ) -> Node:
         """Append a new node under `parent_id`, or as a new root when it is
         None. `name` is made unique; omitting it falls back to "nouveau", the
-        name the toolbar and the canvas shortcut have always used."""
+        name the toolbar and the canvas shortcut have always used.
+
+        A child inherits its parent's activity and forces it open; a root has
+        no parent to inherit from and stays active."""
         parent = self._require(parent_id) if parent_id is not None else None
         if parent is not None:
             self._check_capacity(parent)
@@ -139,6 +153,14 @@ class FlowGraph:
             name=self.unique_name(name if name is not None else "nouveau"),
             type=type,
         )
+        if parent is not None:
+            # set_active() already carries a subtree down with its parent, and
+            # the generator drops everything under an inactive ancestor: an
+            # active child there would be a state no execution can reach.
+            node.is_active = parent.is_active
+            # Adding to a collapsed parent would hide the new node, so the
+            # parent expands: the result of the action has to be visible.
+            parent.is_collapsed = False
         self._attach(node, parent)
         self.mark_modified()
         return node
@@ -313,3 +335,19 @@ class FlowGraph:
         script_path = self.write_run_script(from_node_id, interpreters)
         started = run_script(script_path, terminal if terminal is not None else DEFAULT_TERMINAL)
         return script_path if started else None
+
+    def open_terminal(self, terminal: str | None = None) -> bool:
+        """Open a terminal in work_dir(). Returns whether it started -- the
+        caller is what tells the user, and an unsaved flow is a normal case
+        here, not an error."""
+        return open_terminal(
+            self.work_dir(), terminal if terminal is not None else DEFAULT_TERMINAL
+        )
+
+    def open_editor(self, editor: str | None = None) -> bool:
+        """Open work_dir() in the configured editor. Returns whether it
+        started -- write_script() puts the script in that same folder, so
+        opening it is what shows the generated script."""
+        return open_editor(
+            self.work_dir(), editor if editor is not None else DEFAULT_EDITOR
+        )

@@ -9,6 +9,7 @@ from flower.app.prefs import interpreters as interpreters_mod
 from flower.app.prefs import highlight_styles as highlight_styles_mod
 from flower.app.prefs import indent as indent_mod
 from flower.app.prefs import terminal as terminal_mod
+from flower.app.prefs import editor as editor_mod
 from flower.app.prefs.theme import Theme, load_theme, save_theme
 from flower.app.prefs.interpreters import load_interpreters, save_interpreter
 from flower.app.prefs.highlight_styles import DARK_STYLES, LIGHT_STYLES, load_style, save_style
@@ -33,6 +34,7 @@ def isolated_settings(tmp_path, monkeypatch):
     monkeypatch.setattr(highlight_styles_mod, "QSettings", settings_factory)
     monkeypatch.setattr(indent_mod, "QSettings", settings_factory)
     monkeypatch.setattr(terminal_mod, "QSettings", settings_factory)
+    monkeypatch.setattr(editor_mod, "QSettings", settings_factory)
 
 
 @pytest.fixture(autouse=True)
@@ -94,6 +96,19 @@ def test_terminal_field_saves_on_editing_finished(qapp, monkeypatch):
     dialog._terminal_edit.editingFinished.emit()
 
     assert saved == ["kitty"]
+
+
+def test_editor_field_saves_on_editing_finished(qapp, monkeypatch):
+    saved = []
+    monkeypatch.setattr(
+        "flower.app.preferences_dialog.save_editor", lambda cmd: saved.append(cmd)
+    )
+    dialog = PreferencesDialog()
+
+    dialog._editor_edit.setText("subl")
+    dialog._editor_edit.editingFinished.emit()
+
+    assert saved == ["subl"]
 
 
 def _keyword_color(preview):

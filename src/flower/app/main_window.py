@@ -19,6 +19,7 @@ from flower.app.prefs.theme import is_dark
 from flower.app.prefs.interpreters import load_interpreters
 from flower.app.prefs.recent import add_recent, clear_recent, load_recent, remove_recent
 from flower.app.prefs.terminal import load_terminal
+from flower.app.prefs.editor import load_editor
 from flower.version import get_version
 
 # (background, text) pairs, keyed by whether the app is currently dark.
@@ -102,11 +103,13 @@ class MainWindow(QMainWindow):
         file_menu.addAction("Quitter",       self.close,      "Ctrl+Q")
 
         exec_menu = self.menuBar().addMenu("Exécution")
-        exec_menu.addAction("Générer le script", self._generate_script)
+        exec_menu.addAction("Générer le script", self._generate_script, "Alt+G")
         exec_menu.addAction("Lancer le script",  self._launch_script, "Alt+R")
         exec_menu.addSeparator()
         exec_menu.addAction("Exporter en .dot",             self._export_dot)
         exec_menu.addAction("Exporter en .dot (actifs)",    self._export_dot_active)
+        exec_menu.addSeparator()
+        exec_menu.addAction("Ouvrir un terminal ici", self._open_terminal, "Alt+O")
 
         help_menu = self.menuBar().addMenu("Aide")
         help_menu.addAction("À propos de Flower", self._show_about)
@@ -206,7 +209,15 @@ class MainWindow(QMainWindow):
         if not self._ensure_saved():
             return
         path = self._flow.write_script(interpreters=load_interpreters())
+        # The script exists from here on, so its success is reported first: a
+        # missing editor command must not read as a failed generation.
         self.statusBar().showMessage(f"Script généré : {path.name}", 3000)
+        editor = load_editor()
+        if not self._flow.open_editor(editor=editor):
+            QMessageBox.warning(
+                self, "Échec de l'ouverture",
+                f"Impossible de lancer l'éditeur « {editor} ».",
+            )
 
     def _launch_script(self) -> None:
         if not self._ensure_saved():
@@ -218,6 +229,18 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(
                 self, "Échec du lancement",
                 "Impossible d'ouvrir un terminal pour exécuter le script.",
+            )
+
+    def _open_terminal(self) -> None:
+        """No _ensure_saved(): an unsaved flow opens the current directory,
+        which is precisely what this shortcut is for."""
+        terminal = load_terminal()
+        if self._flow.open_terminal(terminal=terminal):
+            self.statusBar().showMessage(f"Terminal ouvert : {self._flow.work_dir()}", 3000)
+        else:
+            QMessageBox.warning(
+                self, "Échec du lancement",
+                f"Impossible d'ouvrir le terminal « {terminal} ».",
             )
 
     def _export_dot(self) -> None:

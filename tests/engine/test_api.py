@@ -1,8 +1,10 @@
 import uuid
 import pytest
+from pathlib import Path
+from flower.engine import api as api_module
 from flower.engine.api import FlowGraph
 from flower.engine.errors import CycleError, MaxChildrenError
-from flower.engine.execution.runner import DEFAULT_TERMINAL
+from flower.engine.execution.runner import DEFAULT_EDITOR, DEFAULT_TERMINAL
 from flower.engine.models.graph import Graph
 from flower.engine.models.node import Node, NodeType
 
@@ -498,3 +500,103 @@ def test_export_dot_on_an_unsaved_flow_raises():
     flow = FlowGraph(Graph(roots=[_node("root")]))
     with pytest.raises(ValueError):
         flow.export_dot()
+
+
+def test_work_dir_is_the_folder_of_the_flow(tmp_path):
+    flow = FlowGraph(Graph(), tmp_path / "demo.flow")
+
+    assert flow.work_dir() == tmp_path
+
+
+def test_work_dir_falls_back_to_the_current_directory(tmp_path, monkeypatch):
+    """An unsaved flow has no folder of its own; the process's directory is
+    where the user launched the application from."""
+    monkeypatch.chdir(tmp_path)
+
+    assert FlowGraph.new().work_dir() == Path.cwd()
+
+
+def test_open_terminal_targets_the_work_dir(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        api_module, "open_terminal",
+        lambda directory, terminal: (calls.append((directory, terminal)), True)[1],
+    )
+    flow = FlowGraph(Graph(), tmp_path / "demo.flow")
+
+    assert flow.open_terminal(terminal="kitty") is True
+    assert calls == [(tmp_path, "kitty")]
+
+
+def test_open_terminal_defaults_to_the_engine_terminal(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        api_module, "open_terminal",
+        lambda directory, terminal: (calls.append(terminal), True)[1],
+    )
+
+    FlowGraph(Graph(), tmp_path / "demo.flow").open_terminal()
+
+    assert calls == [DEFAULT_TERMINAL]
+
+
+def test_open_editor_targets_the_work_dir(tmp_path, monkeypatch):
+    """The script is written next to the flow, so the folder holding it is the
+    work dir -- no second path to compute."""
+    calls = []
+    monkeypatch.setattr(
+        api_module, "open_editor",
+        lambda path, editor: (calls.append((path, editor)), True)[1],
+    )
+    flow = FlowGraph(Graph(), tmp_path / "demo.flow")
+
+    assert flow.open_editor(editor="subl") is True
+    assert calls == [(tmp_path, "subl")]
+
+
+def test_open_editor_defaults_to_the_engine_editor(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        api_module, "open_editor",
+        lambda path, editor: (calls.append(editor), True)[1],
+    )
+
+    FlowGraph(Graph(), tmp_path / "demo.flow").open_editor()
+
+    assert calls == [DEFAULT_EDITOR]
+
+
+def test_a_child_of_an_inactive_parent_starts_inactive():
+    """set_active() already carries a subtree down with its parent, and the
+    generator drops everything under an inactive ancestor: an active child
+    there would be a state no execution can reach."""
+    flow, root, _child, _grandchild, _other = _tree()
+    flow.set_active(root.id, False)
+
+    node = flow.add_node(root.id)
+
+    assert node.is_active is False
+
+
+def test_a_child_of_an_active_parent_stays_active():
+    flow, root, _child, _grandchild, _other = _tree()
+
+    assert flow.add_node(root.id).is_active is True
+
+
+def test_adding_a_child_expands_a_collapsed_parent():
+    """Adding to a collapsed parent would hide the new node, so the parent
+    expands: the result of the action has to be visible."""
+    flow, root, _child, _grandchild, _other = _tree()
+    flow.set_collapsed(root.id, True)
+
+    flow.add_node(root.id)
+
+    assert root.is_collapsed is False
+
+
+def test_a_new_root_is_active():
+    """A root has no parent to inherit from."""
+    flow = FlowGraph.new()
+
+    assert flow.add_node(None).is_active is True

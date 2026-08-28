@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 
 DEFAULT_TERMINAL = "x-terminal-emulator"
+DEFAULT_EDITOR   = "code"
 
 # Terminals started so far, kept only to poll() them on the next launch.
 # Popen keeps this process as their parent, so a terminal the user closes
@@ -39,6 +40,52 @@ def run_script(script_path: Path, terminal: str = DEFAULT_TERMINAL) -> bool:
         process = subprocess.Popen(
             [terminal, "-e", "bash", "-c", command], start_new_session=True
         )
+    except OSError:
+        return False
+    _running.append(process)
+    return True
+
+
+def open_terminal(directory: Path, terminal: str = DEFAULT_TERMINAL) -> bool:
+    """Open a new detached terminal window with `directory` as its working
+    directory. Returns whether the terminal process was started.
+
+    No `-e` here, unlike run_script(): this opens an interactive shell for the
+    user to type in, not a command. Detaching and reaping work exactly as they
+    do for a script launch, and the process joins the same _running list.
+    """
+    _reap()
+    try:
+        process = subprocess.Popen(
+            [terminal], cwd=str(directory), start_new_session=True
+        )
+    except OSError:
+        return False
+    _running.append(process)
+    return True
+
+
+def open_editor(path: Path, editor: str = DEFAULT_EDITOR) -> bool:
+    """Open `path` -- a folder -- in a detached editor process. Returns
+    whether the editor was started.
+
+    The command is shlex-split, unlike `terminal`: an editor is commonly
+    configured with arguments (`code -n`, `flatpak run com.visualstudio.code`).
+    A blank command yields an empty argv, which would run the path itself as
+    the program, so it is refused outright. A malformed command -- an
+    unbalanced quote, which shlex.split() cannot parse -- is likewise a
+    configuration mistake, reported the same way as any other failed launch
+    rather than raised for the caller to handle.
+    """
+    _reap()
+    try:
+        command = shlex.split(editor)
+    except ValueError:
+        return False
+    if not command:
+        return False
+    try:
+        process = subprocess.Popen(command + [str(path)], start_new_session=True)
     except OSError:
         return False
     _running.append(process)

@@ -14,6 +14,7 @@ from flower.app.prefs.indent import (
     MAX_INDENT_WIDTH, MIN_INDENT_WIDTH, load_indent_width, save_indent_width,
 )
 from flower.app.prefs.terminal import load_terminal, save_terminal
+from flower.app.prefs.editor import load_editor, save_editor
 from flower.app.editor.code_edit import CodeEdit
 from flower.app.editor.highlighter import PygmentsHighlighter
 
@@ -113,6 +114,11 @@ class PreferencesDialog(QDialog):
             lambda: save_terminal(self._terminal_edit.text())
         )
         exec_form.addRow("Terminal :", self._terminal_edit)
+        self._editor_edit = QLineEdit(load_editor())
+        self._editor_edit.editingFinished.connect(
+            lambda: save_editor(self._editor_edit.text())
+        )
+        exec_form.addRow("Éditeur :", self._editor_edit)
         exec_group.setLayout(exec_form)
 
         highlight_group = QGroupBox("Coloration syntaxique")

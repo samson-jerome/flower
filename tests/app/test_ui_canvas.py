@@ -1,5 +1,6 @@
 import uuid
-from PySide6.QtCore import QPointF, QPoint
+from PySide6.QtCore import QPointF, QPoint, QEvent, Qt
+from PySide6.QtGui import QKeyEvent
 from flower.engine.api import FlowGraph
 from flower.engine.models.graph import Graph
 from flower.engine.models.node import Node, NodeType
@@ -181,3 +182,138 @@ def test_press_on_the_node_body_still_arms_a_drag(qapp):
         QPointF(rect.left() + 60.0, rect.center().y()), QPoint(0, 0)
     )
     assert canvas._drag_candidate_id == node.id
+
+
+def _key(key, mod=Qt.KeyboardModifier.NoModifier):
+    return QKeyEvent(QEvent.Type.KeyPress, key, mod)
+
+
+def test_c_emits_add_child_when_nothing_is_selected(qapp):
+    """Without a selection the handler used to return before reaching the C
+    branch, so the only way to create a first root was the toolbar."""
+    canvas, _ = _canvas()
+    received = []
+    canvas.add_child_requested.connect(lambda: received.append(True))
+
+    canvas._handle_nav_key(_key(Qt.Key.Key_C))
+
+    assert received == [True]
+
+
+def test_c_still_emits_add_child_with_a_selection(qapp):
+    root = _node("root")
+    canvas, _ = _canvas(root)
+    canvas.select_node(root.id)
+    received = []
+    canvas.add_child_requested.connect(lambda: received.append(True))
+
+    canvas._handle_nav_key(_key(Qt.Key.Key_C))
+
+    assert received == [True]
+
+
+def test_i_toggles_the_active_state_of_the_selected_node(qapp):
+    root = _node("root")
+    canvas, flow = _canvas(root)
+    canvas.select_node(root.id)
+    changed = []
+    canvas.graph_changed.connect(lambda: changed.append(True))
+
+    canvas._handle_nav_key(_key(Qt.Key.Key_I))
+
+    assert root.is_active is False
+    assert flow.is_dirty is True
+    assert changed == [True]
+    # The layout was rebuilt: the selection has to survive it, since the
+    # status bar reads the node from the selection signal.
+    assert canvas.selected_id == root.id
+
+
+def test_i_toggles_back_to_active(qapp):
+    root = _node("root")
+    canvas, _ = _canvas(root)
+    canvas.select_node(root.id)
+
+    canvas._handle_nav_key(_key(Qt.Key.Key_I))
+    canvas._handle_nav_key(_key(Qt.Key.Key_I))
+
+    assert root.is_active is True
+
+
+def test_h_collapses_a_node_with_children(qapp):
+    root  = _node("root")
+    child = _node("child")
+    root.children.append(child)
+    child.parent = root
+    canvas, flow = _canvas(root)
+    canvas.select_node(root.id)
+
+    canvas._handle_nav_key(_key(Qt.Key.Key_H))
+
+    assert root.is_collapsed is True
+    assert child.id not in canvas._items   # the subtree is no longer drawn
+    assert flow.is_dirty is True
+    assert canvas.selected_id == root.id
+
+
+def test_h_on_a_leaf_leaves_the_flow_clean(qapp):
+    """A leaf has no -/+ button, so collapsing it would dirty the file for a
+    state nothing can show."""
+    leaf = _node("leaf")
+    canvas, flow = _canvas(leaf)
+    canvas.select_node(leaf.id)
+
+    canvas._handle_nav_key(_key(Qt.Key.Key_H))
+
+    assert leaf.is_collapsed is False
+    assert flow.is_dirty is False
+
+
+def test_i_and_h_do_nothing_without_a_selection(qapp):
+    root = _node("root")
+    canvas, flow = _canvas(root)
+
+    canvas._handle_nav_key(_key(Qt.Key.Key_I))
+    canvas._handle_nav_key(_key(Qt.Key.Key_H))
+
+    assert root.is_active is True
+    assert root.is_collapsed is False
+    assert flow.is_dirty is False
+
+
+def test_o_requests_the_editor_for_the_selected_node(qapp):
+    root = _node("root")
+    canvas, _ = _canvas(root)
+    canvas.select_node(root.id)
+    received = []
+    canvas.node_edit_requested.connect(received.append)
+
+    canvas._handle_nav_key(_key(Qt.Key.Key_O))
+
+    assert received == [root.id]
+
+
+def test_alt_o_does_not_request_the_editor(qapp):
+    """Alt+O is the "Ouvrir un terminal ici" action: Qt consumes the
+    accelerator before the canvas sees the key, but the guard means the two
+    cannot both fire even if it ever reached here."""
+    root = _node("root")
+    canvas, _ = _canvas(root)
+    canvas.select_node(root.id)
+    received = []
+    canvas.node_edit_requested.connect(received.append)
+
+    canvas._handle_nav_key(_key(Qt.Key.Key_O, Qt.KeyboardModifier.AltModifier))
+
+    assert received == []
+
+
+def test_o_does_nothing_without_a_selection(qapp):
+    root = _node("root")
+    canvas, _ = _canvas(root)
+    received = []
+    canvas.node_edit_requested.connect(received.append)
+
+    canvas._handle_nav_key(_key(Qt.Key.Key_O))
+
+    assert received == []
