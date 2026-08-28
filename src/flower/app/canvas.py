@@ -462,6 +462,10 @@ class GraphCanvas(QGraphicsView):
             self.refresh_layout()
         elif key == Qt.Key.Key_Delete:
             self.delete_requested.emit()
+        elif key == Qt.Key.Key_O and mod == Qt.KeyboardModifier.NoModifier:
+            # Same path as the double-click. NoModifier, unlike the other bare
+            # keys here: Alt+O is the "Ouvrir un terminal ici" action.
+            self.node_edit_requested.emit(node.id)
         elif key == Qt.Key.Key_I:
             self._on_active_toggled(node.id)
         elif key == Qt.Key.Key_H:

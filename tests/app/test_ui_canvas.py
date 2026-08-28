@@ -279,3 +279,41 @@ def test_i_and_h_do_nothing_without_a_selection(qapp):
     assert root.is_active is True
     assert root.is_collapsed is False
     assert flow.is_dirty is False
+
+
+def test_o_requests_the_editor_for_the_selected_node(qapp):
+    root = _node("root")
+    canvas, _ = _canvas(root)
+    canvas.select_node(root.id)
+    received = []
+    canvas.node_edit_requested.connect(received.append)
+
+    canvas._handle_nav_key(_key(Qt.Key.Key_O))
+
+    assert received == [root.id]
+
+
+def test_alt_o_does_not_request_the_editor(qapp):
+    """Alt+O is the "Ouvrir un terminal ici" action: Qt consumes the
+    accelerator before the canvas sees the key, but the guard means the two
+    cannot both fire even if it ever reached here."""
+    root = _node("root")
+    canvas, _ = _canvas(root)
+    canvas.select_node(root.id)
+    received = []
+    canvas.node_edit_requested.connect(received.append)
+
+    canvas._handle_nav_key(_key(Qt.Key.Key_O, Qt.KeyboardModifier.AltModifier))
+
+    assert received == []
+
+
+def test_o_does_nothing_without_a_selection(qapp):
+    root = _node("root")
+    canvas, _ = _canvas(root)
+    received = []
+    canvas.node_edit_requested.connect(received.append)
+
+    canvas._handle_nav_key(_key(Qt.Key.Key_O))
+
+    assert received == []
