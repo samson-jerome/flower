@@ -1,1 +1,22 @@
-{}
+{
+  "dialog.prefs.title": "Préférences",
+  "dialog.prefs.display": "Affichage",
+  "dialog.prefs.theme.light": "Clair",
+  "dialog.prefs.theme.dark": "Sombre",
+  "dialog.prefs.theme.system": "Suivre le système",
+  "dialog.prefs.language": "Langue :",
+  "dialog.prefs.language.restart": "La langue sera appliquée au prochain démarrage.",
+  "dialog.prefs.interpreters": "Interprètes",
+  "dialog.prefs.interpreter_row": "{label} :",
+  "dialog.prefs.exec": "Exécution",
+  "dialog.prefs.terminal": "Terminal :",
+  "dialog.prefs.editor": "Éditeur :",
+  "dialog.prefs.highlight": "Coloration syntaxique",
+  "dialog.prefs.highlight.light": "Thème clair :",
+  "dialog.prefs.highlight.dark": "Thème sombre :",
+  "dialog.prefs.preview_snippet": "# archive les journaux\nfor f in \"$SRC\"/*.log; do\n    gzip -9 \"$f\" && echo \"ok: $f\"\ndone",
+  "dialog.prefs.edit": "Édition",
+  "dialog.prefs.indent": "Largeur d'indentation :",
+  "dialog.prefs.indent.suffix": " espaces",
+  "dialog.prefs.close": "Fermer"
+}
