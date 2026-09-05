@@ -1,4 +1,5 @@
 from flower.app.notes_panel import NotesPanel
+from flower.i18n import t
 
 
 def test_notes_panel_starts_expanded(qapp):
@@ -164,3 +165,18 @@ def test_notes_panel_click_far_from_title_toggles(qapp):
     qapp.processEvents()
 
     assert p.is_collapsed() is True
+
+
+def test_notes_panel_resolves_its_defaults_from_the_catalog(qapp):
+    """The title and placeholder are resolved in __init__, not in the
+    signature — a default argument would be evaluated at import time,
+    before main() loads the catalog, and would show a bare key."""
+    panel = NotesPanel()
+    title = panel._toggle.text()
+    placeholder = panel._editor.placeholderText()
+    assert title == t("panel.description.title")
+    assert placeholder == t("panel.description.placeholder")
+    # t() returns the key itself when it is missing, so equality above is
+    # not enough on its own: these prove the catalog really carries them.
+    assert title != "panel.description.title"
+    assert placeholder != "panel.description.placeholder"
