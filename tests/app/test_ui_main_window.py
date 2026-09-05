@@ -7,6 +7,7 @@ from flower.engine.api import FlowGraph
 from flower.engine.models.graph import Graph
 from flower.engine.models.node import Node, NodeType
 from flower.app.main_window import MainWindow
+from flower import i18n
 from flower.i18n import t
 from flower.version import get_version
 
@@ -300,3 +301,23 @@ def test_a_failing_editor_does_not_lose_the_generated_script(qapp, tmp_path, mon
     assert (tmp_path / "demo.sh").exists()
     assert len(warned) == 1
     assert "code" in warned[0]
+
+
+def test_the_english_catalog_resolves_to_english_ui(qapp, tmp_path, monkeypatch):
+    """Nothing else in the suite ever builds a widget with "en" active, so an
+    English value silently left as its French text would be invisible to CI.
+    Expected strings are hardcoded literals here on purpose: comparing
+    against t(...) would not catch a value that was never translated, since
+    both sides would move together.
+
+    Restores "fr" in a finally so a failure here cannot leak the language
+    into the rest of the session."""
+    try:
+        i18n.load("en")
+        win, _ = _window(Graph(), None, monkeypatch)
+
+        menu_bar_actions = win.menuBar().actions()
+        assert [a.text() for a in menu_bar_actions] == ["File", "Run", "Help"]
+        assert win.windowTitle() == "Flower — Untitled"
+    finally:
+        i18n.load("fr")

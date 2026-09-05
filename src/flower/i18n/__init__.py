@@ -14,7 +14,7 @@ def load_catalog(language: str) -> dict[str, str]:
 
     Read through importlib.resources rather than a path relative to __file__,
     so resolution survives an installed wheel."""
-    path = resources.files(__package__).joinpath(f"locales/{language}.json")
+    path = resources.files(__package__).joinpath("locales", f"{language}.json")
     return json.loads(path.read_text(encoding="utf-8"))
 
 

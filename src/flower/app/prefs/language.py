@@ -20,7 +20,7 @@ def load_language() -> str:
 
     System detection only supplies the initial default: once the user picks
     one explicitly, QSettings wins."""
-    value = QSettings().value(_SETTINGS_KEY, "")
+    value = str(QSettings().value(_SETTINGS_KEY, "") or "")
     return value if value in AVAILABLE_LANGUAGES else detect_system_language()
 
 
@@ -48,5 +48,5 @@ def install_qt_translator(app, language: str) -> bool:
     # Qt does not take ownership of the translator. Without a reference it is
     # garbage-collected and the standard widgets revert with no error at all.
     # Same trick as prefs/theme.py uses for its colour-scheme watcher.
-    app._qt_translator = translator
+    app._qt_translator = translator  # type: ignore[attr-defined]
     return True

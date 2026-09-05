@@ -304,7 +304,7 @@ class FlowGraph:
     def write_script(
         self, from_node_id: str | None = None, interpreters: dict[str, str] | None = None,
     ) -> Path:
-        """Write <stem>.sh next to the flow -- the "Générer le script"
+        """Write <stem>.sh next to the flow -- the "Generate the script"
         action -- and return its path."""
         path = self._require_path()
         write_bash_script(self._script_graph(from_node_id), path, interpreters)

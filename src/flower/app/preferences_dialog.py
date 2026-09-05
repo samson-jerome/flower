@@ -89,14 +89,15 @@ class PreferencesDialog(QDialog):
         for theme, radio in self._radios.items():
             group_layout.addWidget(radio)
             button_group.addButton(radio)
-            radio.toggled.connect(lambda checked, t=theme: checked and self._set_theme(t))
+            radio.toggled.connect(lambda checked, th=theme: checked and self._set_theme(th))
         self._radios[load_theme()].setChecked(True)
 
+        self._opened_language = load_language()
         self._language_combo = QComboBox()
         for code, label in AVAILABLE_LANGUAGES.items():
             self._language_combo.addItem(label, code)
         self._language_combo.setCurrentIndex(
-            self._language_combo.findData(load_language())
+            self._language_combo.findData(self._opened_language)
         )
         self._language_notice = QLabel(t("dialog.prefs.language.restart"))
         self._language_notice.setWordWrap(True)
@@ -193,5 +194,6 @@ class PreferencesDialog(QDialog):
         apply_theme(QApplication.instance(), theme)
 
     def _on_language_changed(self, _index: int) -> None:
-        save_language(self._language_combo.currentData())
-        self._language_notice.setVisible(True)
+        selected = self._language_combo.currentData()
+        save_language(selected)
+        self._language_notice.setVisible(selected != self._opened_language)
