@@ -7,6 +7,7 @@ from flower.engine.api import FlowGraph
 from flower.engine.models.graph import Graph
 from flower.engine.models.node import Node, NodeType
 from flower.app.main_window import MainWindow
+from flower.i18n import t
 from flower.version import get_version
 
 
@@ -87,7 +88,7 @@ def test_exec_node_ignores_an_active_node_under_an_inactive_ancestor(qapp, tmp_p
 
     assert launched == []
     assert list(tmp_path.iterdir()) == []
-    assert win.statusBar().currentMessage() == "Un nœud parent est inactif : rien à exécuter."
+    assert win.statusBar().currentMessage() == t("status.inactive_ancestor")
 
 
 def test_exec_node_ignores_an_unknown_id(qapp, tmp_path, monkeypatch):
@@ -207,7 +208,7 @@ def test_the_terminal_action_opens_the_flow_folder(qapp, tmp_path, monkeypatch):
     win, _ = _window(Graph(), tmp_path / "demo.flow", monkeypatch)
 
     menu_bar_actions = win.menuBar().actions()
-    exec_action = next(a for a in menu_bar_actions if a.text() == "Exécution")
+    exec_action = next(a for a in menu_bar_actions if a.text() == t("menu.exec"))
     exec_menu = exec_action.menu()
     terminal_entry = next(
         a for a in exec_menu.actions() if a.text() == "Ouvrir un terminal ici"
@@ -272,9 +273,9 @@ def test_generate_script_opens_the_folder_in_the_editor(qapp, tmp_path, monkeypa
     win, _ = _window(Graph(roots=[_script_node("root")]), tmp_path / "demo.flow", monkeypatch)
 
     menu_bar_actions = win.menuBar().actions()
-    exec_action = next(a for a in menu_bar_actions if a.text() == "Exécution")
+    exec_action = next(a for a in menu_bar_actions if a.text() == t("menu.exec"))
     exec_menu = exec_action.menu()
-    generate = next(a for a in exec_menu.actions() if a.text() == "Générer le script")
+    generate = next(a for a in exec_menu.actions() if a.text() == t("menu.exec.generate"))
 
     generate.trigger()
 
