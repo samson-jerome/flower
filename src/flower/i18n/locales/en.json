@@ -27,5 +27,14 @@
   "toolbar.export": "Export to XML",
   "panel.dock.undock": "Open in a floating window",
   "panel.description.title": "Description",
-  "panel.description.placeholder": "Add a description…"
+  "panel.description.placeholder": "Add a description…",
+  "panel.vars.title": "Variables",
+  "panel.vars.col.name": "Name",
+  "panel.vars.col.value": "Value",
+  "panel.vars.col.description": "Description",
+  "panel.vars.col.active": "Active",
+  "panel.vars.col.operation": "Op.",
+  "panel.vars.op.assign": "Assignment",
+  "panel.vars.op.concat": "Concatenation",
+  "panel.vars.op.add": "Addition"
 }

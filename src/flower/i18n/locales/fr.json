@@ -27,5 +27,14 @@
   "toolbar.export": "Exporter en XML",
   "panel.dock.undock": "Ouvrir en fenêtre flottante",
   "panel.description.title": "Description",
-  "panel.description.placeholder": "Ajouter une description…"
+  "panel.description.placeholder": "Ajouter une description…",
+  "panel.vars.title": "Variables",
+  "panel.vars.col.name": "Nom",
+  "panel.vars.col.value": "Valeur",
+  "panel.vars.col.description": "Description",
+  "panel.vars.col.active": "Actif",
+  "panel.vars.col.operation": "Op.",
+  "panel.vars.op.assign": "Assignation",
+  "panel.vars.op.concat": "Concaténation",
+  "panel.vars.op.add": "Addition"
 }

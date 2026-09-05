@@ -1,5 +1,6 @@
 from flower.engine.models.node import Variable, VariableOperation
 from flower.app.vars_panel import VarsPanel
+from flower.i18n import t
 
 
 def test_vars_panel_set_get_roundtrip(qapp):
@@ -86,3 +87,36 @@ def test_vars_panel_set_variables_does_not_emit_variables_changed(qapp):
     panel.variables_changed.connect(lambda: received.append(True))
     panel.set_variables([Variable(name="ENV", value="prod")])
     assert received == []
+
+
+def test_vars_panel_resolves_its_defaults_from_the_catalog(qapp):
+    """The title, column headers and operation labels are resolved in
+    __init__, not in the signature or as class attributes — a default
+    argument or a class body would be evaluated at import time, before
+    main() loads the catalog, and would show a bare key."""
+    panel = VarsPanel()
+    title = panel._toggle.text()
+    headers = [
+        panel._table.horizontalHeaderItem(i).text() for i in range(panel._table.columnCount())
+    ]
+    panel._add_row()
+    combo = panel._table.cellWidget(0, 4)
+    labels = [combo.itemText(i) for i in range(combo.count())]
+    assert title == t("panel.vars.title")
+    assert headers == [
+        t("panel.vars.col.name"),
+        t("panel.vars.col.value"),
+        t("panel.vars.col.description"),
+        t("panel.vars.col.active"),
+        t("panel.vars.col.operation"),
+    ]
+    assert labels == [
+        t("panel.vars.op.assign"),
+        t("panel.vars.op.concat"),
+        t("panel.vars.op.add"),
+    ]
+    # t() returns the key itself when it is missing, so equality above is
+    # not enough on its own: these prove the catalog really carries them.
+    assert title != "panel.vars.title"
+    assert "panel.vars.col.name" not in headers
+    assert "panel.vars.op.assign" not in labels
