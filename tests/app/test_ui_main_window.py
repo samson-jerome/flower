@@ -211,7 +211,7 @@ def test_the_terminal_action_opens_the_flow_folder(qapp, tmp_path, monkeypatch):
     exec_action = next(a for a in menu_bar_actions if a.text() == t("menu.exec"))
     exec_menu = exec_action.menu()
     terminal_entry = next(
-        a for a in exec_menu.actions() if a.text() == "Ouvrir un terminal ici"
+        a for a in exec_menu.actions() if a.text() == t("menu.exec.terminal")
     )
 
     terminal_entry.trigger()

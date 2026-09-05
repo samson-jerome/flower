@@ -10,6 +10,7 @@ from flower.app.editor.type_editors import make_type_editor
 from flower.app.vars_panel import VarsPanel
 from flower.app.notes_panel import NotesPanel, bind_notes_to_splitter
 from flower.app.prefs.theme import is_dark
+from flower.i18n import t
 
 # (background, text) pairs, keyed by whether the app is currently dark.
 _DESCRIPTION_COLORS = {
@@ -37,11 +38,11 @@ class NodeForm(QWidget):
         self._node = node
 
         # ── Section 1 : description ──────────────────────────────────────────
-        self._description = NotesPanel(title="Description")
+        self._description = NotesPanel(title=t("panel.description.title"))
         self._description.set_text(node.description)
 
         # ── Section 2 : variables ────────────────────────────────────────────
-        self._vars = VarsPanel(title="Variables")
+        self._vars = VarsPanel(title=t("panel.vars.title"))
         self._vars.set_variables(node.variables)
 
         self._apply_theme_colors()
@@ -73,10 +74,10 @@ class NodeForm(QWidget):
 
         self._form_layout = QFormLayout()
         form = self._form_layout
-        form.addRow("Type:", self._type_combo)
-        form.addRow("Nom:", self._name)
-        form.addRow("Actif:", self._active)
-        form.addRow("Exécutable:", self._executable)
+        form.addRow(t("form.type"),       self._type_combo)
+        form.addRow(t("form.name"),       self._name)
+        form.addRow(t("form.active"),     self._active)
+        form.addRow(t("form.executable"), self._executable)
         self._refresh_executable_row(node.type)
         self._executable.toggled.connect(self._emit_exec_state)
         self._active.toggled.connect(self._emit_exec_state)
@@ -130,10 +131,10 @@ class NodeForm(QWidget):
         max_children = MAX_CHILDREN.get(ntype)
         if max_children is not None and len(self._node.children) > max_children:
             QMessageBox.warning(
-                self, "Type incompatible",
-                f"Un nœud « {ntype.value} » ne peut avoir plus de {max_children} enfant(s) "
-                f"(celui-ci en a {len(self._node.children)}). "
-                "Réduisez d'abord le nombre d'enfants avant de changer le type.",
+                self, t("dialog.type_incompatible.title"),
+                t("dialog.type_incompatible.body",
+                  type=ntype.value, max=max_children,
+                  count=len(self._node.children)),
             )
             blocked = self._type_combo.blockSignals(True)
             self._type_combo.setCurrentText(self._node.type.value)

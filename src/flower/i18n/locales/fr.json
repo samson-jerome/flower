@@ -82,5 +82,18 @@
   "status.node": "{type} · {name} · {state}",
   "status.node.active": "actif",
   "status.node.inactive": "inactif",
-  "window.untitled": "Sans titre"
+  "window.untitled": "Sans titre",
+  "dialog.editor.title": "Éditer — {type} · {name}",
+  "dialog.editor.cancel": "Annuler",
+  "dialog.editor.apply": "Appliquer",
+  "dialog.editor.save_close": "Sauver && Fermer",
+  "dialog.editor.dock": "Dock",
+  "dialog.editor.exec": "Exec",
+  "dialog.editor.exec.tooltip": "Générer et exécuter le script jusqu'à ce nœud",
+  "dialog.type_incompatible.title": "Type incompatible",
+  "dialog.type_incompatible.body": "Un nœud « {type} » ne peut avoir plus de {max} enfant(s) (celui-ci en a {count}). Réduisez d'abord le nombre d'enfants avant de changer le type.",
+  "form.type": "Type :",
+  "form.name": "Nom :",
+  "form.active": "Actif :",
+  "form.executable": "Exécutable :"
 }

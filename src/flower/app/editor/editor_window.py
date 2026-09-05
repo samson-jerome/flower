@@ -3,6 +3,7 @@ from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton
 from PySide6.QtCore import Signal
 from flower.engine.models.node import Node
 from flower.app.editor.node_form import NodeForm
+from flower.i18n import t
 
 
 class EditorWindow(QDialog):
@@ -14,17 +15,17 @@ class EditorWindow(QDialog):
 
     def __init__(self, node: Node, form: NodeForm | None = None, parent=None):
         super().__init__(parent)
-        self.setWindowTitle(f"Éditer — {node.type} · {node.name}")
+        self.setWindowTitle(t("dialog.editor.title", type=node.type, name=node.name))
         self.setMinimumSize(480, 600)
         self._node = node
         self._form = form if form is not None else NodeForm(node)
 
-        cancel_btn     = QPushButton("Annuler")
-        apply_btn      = QPushButton("Appliquer")
-        save_btn       = QPushButton("Sauver && Fermer")
-        self._dock_btn = QPushButton("Dock")
-        self._exec_btn = QPushButton("Exec")
-        self._exec_btn.setToolTip("Générer et exécuter le script jusqu'à ce nœud")
+        cancel_btn     = QPushButton(t("dialog.editor.cancel"))
+        apply_btn      = QPushButton(t("dialog.editor.apply"))
+        save_btn       = QPushButton(t("dialog.editor.save_close"))
+        self._dock_btn = QPushButton(t("dialog.editor.dock"))
+        self._exec_btn = QPushButton(t("dialog.editor.exec"))
+        self._exec_btn.setToolTip(t("dialog.editor.exec.tooltip"))
         self._exec_btn.setEnabled(self._form.exec_state())
 
         cancel_btn.clicked.connect(self.reject)
@@ -50,12 +51,14 @@ class EditorWindow(QDialog):
 
     def _apply(self) -> None:
         self._form.apply_to_node()
-        self.setWindowTitle(f"Éditer — {self._node.type} · {self._node.name}")
+        self.setWindowTitle(
+            t("dialog.editor.title", type=self._node.type, name=self._node.name)
+        )
         self.node_updated.emit(self._node.id, self._node)
 
     def _on_exec(self) -> None:
         # This dialog is non-modal and the model only receives form edits on
-        # Appliquer, so exec has to commit first -- otherwise it would run a
+        # Apply, so exec has to commit first -- otherwise it would run a
         # script built from stale node data.
         self._apply()
         self.exec_requested.emit(self._node.id)

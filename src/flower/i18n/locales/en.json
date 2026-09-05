@@ -82,5 +82,18 @@
   "status.node": "{type} · {name} · {state}",
   "status.node.active": "active",
   "status.node.inactive": "inactive",
-  "window.untitled": "Untitled"
+  "window.untitled": "Untitled",
+  "dialog.editor.title": "Edit — {type} · {name}",
+  "dialog.editor.cancel": "Cancel",
+  "dialog.editor.apply": "Apply",
+  "dialog.editor.save_close": "Save && Close",
+  "dialog.editor.dock": "Dock",
+  "dialog.editor.exec": "Exec",
+  "dialog.editor.exec.tooltip": "Generate and run the script up to this node",
+  "dialog.type_incompatible.title": "Incompatible type",
+  "dialog.type_incompatible.body": "A \"{type}\" node cannot have more than {max} child(ren) (this one has {count}). Reduce the number of children before changing the type.",
+  "form.type": "Type:",
+  "form.name": "Name:",
+  "form.active": "Active:",
+  "form.executable": "Executable:"
 }

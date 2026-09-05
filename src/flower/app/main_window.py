@@ -422,7 +422,7 @@ class MainWindow(QMainWindow):
         self._canvas.refresh_layout()
         win = self._editor_windows.get(node_id)
         if win:
-            win.setWindowTitle(f"Éditer — {node.type} · {new_name}")
+            win.setWindowTitle(t("dialog.editor.title", type=node.type, name=new_name))
 
     def _on_notes_changed(self, text: str) -> None:
         if self._flow.graph.notes == text:
