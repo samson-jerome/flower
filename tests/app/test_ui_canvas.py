@@ -5,6 +5,7 @@ from flower.engine.api import FlowGraph
 from flower.engine.models.graph import Graph
 from flower.engine.models.node import Node, NodeType
 from flower.app.canvas import GraphCanvas
+from flower.i18n import t
 
 
 def _node(name, ntype=NodeType.NOOP):
@@ -60,7 +61,7 @@ def test_drop_refused_when_target_if_node_already_has_two_children(qapp):
 
     assert target.children == [child_a, child_b]
     assert drag in flow.graph.roots
-    assert received == ["Un nœud « if » ne peut avoir plus de 2 enfant(s)."]
+    assert received == [t("error.max_children", type="if", max=2)]
 
 
 def test_drop_onto_its_own_descendant_is_refused(qapp):
@@ -81,7 +82,7 @@ def test_drop_onto_its_own_descendant_is_refused(qapp):
 
     assert grandparent.children == [parent]
     assert flow.graph.roots == [grandparent]
-    assert received == ["Un nœud ne peut pas devenir son propre descendant."]
+    assert received == [t("error.cycle")]
 
 
 def test_drop_onto_itself_is_silently_ignored(qapp):

@@ -18,5 +18,7 @@
   "dialog.prefs.edit": "Editing",
   "dialog.prefs.indent": "Indent width:",
   "dialog.prefs.indent.suffix": " spaces",
-  "dialog.prefs.close": "Close"
+  "dialog.prefs.close": "Close",
+  "error.max_children": "A \"{type}\" node cannot have more than {max} child(ren).",
+  "error.cycle": "A node cannot become its own descendant."
 }

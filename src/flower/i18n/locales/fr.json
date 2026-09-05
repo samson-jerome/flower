@@ -18,5 +18,7 @@
   "dialog.prefs.edit": "Édition",
   "dialog.prefs.indent": "Largeur d'indentation :",
   "dialog.prefs.indent.suffix": " espaces",
-  "dialog.prefs.close": "Fermer"
+  "dialog.prefs.close": "Fermer",
+  "error.max_children": "Un nœud « {type} » ne peut avoir plus de {max} enfant(s).",
+  "error.cycle": "Un nœud ne peut pas devenir son propre descendant."
 }
