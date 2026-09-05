@@ -95,5 +95,15 @@
   "form.type": "Type:",
   "form.name": "Name:",
   "form.active": "Active:",
-  "form.executable": "Executable:"
+  "form.executable": "Executable:",
+  "form.script.language": "Language:",
+  "form.script.body": "Body:",
+  "form.data.command": "Command:",
+  "form.data.content": "Content:",
+  "form.if.condition": "Condition:",
+  "form.loop.index": "Index:",
+  "form.loop.mode": "Mode:",
+  "form.loop.mode.list": "List",
+  "form.loop.items.placeholder": "One item per line",
+  "form.loop.expression.placeholder": "Bash command producing the items"
 }

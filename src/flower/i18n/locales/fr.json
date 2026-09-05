@@ -95,5 +95,15 @@
   "form.type": "Type :",
   "form.name": "Nom :",
   "form.active": "Actif :",
-  "form.executable": "Exécutable :"
+  "form.executable": "Exécutable :",
+  "form.script.language": "Langage :",
+  "form.script.body": "Corps :",
+  "form.data.command": "Commande :",
+  "form.data.content": "Contenu :",
+  "form.if.condition": "Condition :",
+  "form.loop.index": "Index :",
+  "form.loop.mode": "Mode :",
+  "form.loop.mode.list": "Liste",
+  "form.loop.items.placeholder": "Un item par ligne",
+  "form.loop.expression.placeholder": "Commande bash produisant les items"
 }

@@ -176,7 +176,7 @@ class NodeForm(QWidget):
         """Only script and data nodes can be run up to, so for any other type
         the row is disabled and the flag does not apply -- but it is left
         checked so a round trip through an ineligible type (e.g. script ->
-        noop -> script, all before Appliquer) does not silently drop the
+        noop -> script, all before Apply) does not silently drop the
         user's pending choice. get_node_data() and exec_state() already gate
         on the type, so persistence is unaffected."""
         eligible = ntype in EXECUTABLE_TYPES
