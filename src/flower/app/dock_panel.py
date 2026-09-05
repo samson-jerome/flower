@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Signal
 from flower.engine.models.node import Node
 from flower.app.editor.node_form import NodeForm
+from flower.i18n import t
 
 
 class DockEntry(QWidget):
@@ -29,7 +30,7 @@ class DockEntry(QWidget):
 
         self._undock_btn = QPushButton("↗")
         self._undock_btn.setFixedWidth(24)
-        self._undock_btn.setToolTip("Ouvrir en fenêtre flottante")
+        self._undock_btn.setToolTip(t("panel.dock.undock"))
         self._undock_btn.clicked.connect(
             lambda: self.undock_requested.emit(self._node_id)
         )

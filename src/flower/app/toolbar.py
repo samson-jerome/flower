@@ -2,6 +2,7 @@ from __future__ import annotations
 from PySide6.QtWidgets import QToolBar
 from PySide6.QtGui import QAction
 from PySide6.QtCore import Qt, Signal
+from flower.i18n import t
 
 
 class ToolBar(QToolBar):
@@ -20,10 +21,10 @@ class ToolBar(QToolBar):
         act_refresh = QAction("↺", self)
         act_export  = QAction("⬇", self)
 
-        act_add.setToolTip("Ajouter un nœud enfant (C)")
-        act_delete.setToolTip("Supprimer le nœud sélectionné (Del)")
-        act_refresh.setToolTip("Recalculer le layout (R)")
-        act_export.setToolTip("Exporter en XML")
+        act_add.setToolTip(t("toolbar.add"))
+        act_delete.setToolTip(t("toolbar.delete"))
+        act_refresh.setToolTip(t("toolbar.refresh"))
+        act_export.setToolTip(t("toolbar.export"))
 
         self.addAction(act_add)
         self.addAction(act_delete)
