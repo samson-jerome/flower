@@ -16,6 +16,8 @@ from flower.app.prefs.highlight_styles import DARK_STYLES, LIGHT_STYLES, load_st
 from flower.app.prefs.indent import (
     MAX_INDENT_WIDTH, MIN_INDENT_WIDTH, load_indent_width, save_indent_width,
 )
+from flower.app.prefs import language as language_mod
+from flower.app.prefs.language import load_language, save_language
 from flower.engine.execution.bash_generator import DEFAULT_INTERPRETERS
 from flower.app.preferences_dialog import PreferencesDialog
 
@@ -35,6 +37,7 @@ def isolated_settings(tmp_path, monkeypatch):
     monkeypatch.setattr(indent_mod, "QSettings", settings_factory)
     monkeypatch.setattr(terminal_mod, "QSettings", settings_factory)
     monkeypatch.setattr(editor_mod, "QSettings", settings_factory)
+    monkeypatch.setattr(language_mod, "QSettings", settings_factory)
 
 
 @pytest.fixture(autouse=True)
@@ -192,3 +195,38 @@ def test_the_indent_spinbox_cannot_leave_the_supported_range(qapp):
     dialog = PreferencesDialog()
     assert dialog._indent_spin.minimum() == MIN_INDENT_WIDTH
     assert dialog._indent_spin.maximum() == MAX_INDENT_WIDTH
+
+
+def test_language_combo_offers_every_shipped_language(qapp):
+    dialog = PreferencesDialog()
+    codes = [dialog._language_combo.itemData(i)
+             for i in range(dialog._language_combo.count())]
+    assert codes == ["fr", "en"]
+
+
+def test_language_combo_labels_each_language_in_its_own_tongue(qapp):
+    dialog = PreferencesDialog()
+    labels = [dialog._language_combo.itemText(i)
+              for i in range(dialog._language_combo.count())]
+    assert labels == ["Français", "English"]
+
+
+def test_language_combo_preselects_the_saved_language(qapp):
+    save_language("en")
+    dialog = PreferencesDialog()
+    assert dialog._language_combo.currentData() == "en"
+
+
+def test_choosing_a_language_saves_it(qapp):
+    save_language("fr")
+    dialog = PreferencesDialog()
+    dialog._language_combo.setCurrentIndex(dialog._language_combo.findData("en"))
+    assert load_language() == "en"
+
+
+def test_the_restart_notice_appears_only_once_a_language_is_chosen(qapp):
+    save_language("fr")
+    dialog = PreferencesDialog()
+    assert not dialog._language_notice.isVisibleTo(dialog)
+    dialog._language_combo.setCurrentIndex(dialog._language_combo.findData("en"))
+    assert dialog._language_notice.isVisibleTo(dialog)

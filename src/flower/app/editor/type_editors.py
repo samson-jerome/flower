@@ -8,6 +8,7 @@ from flower.engine.models.node import NodeType
 from flower.app.prefs import highlight_styles
 from flower.app.editor.code_edit import CodeEdit
 from flower.app.editor.highlighter import PygmentsHighlighter
+from flower.i18n import t
 
 
 def _follow_theme(highlighter: PygmentsHighlighter) -> None:
@@ -54,9 +55,9 @@ class ScriptEditor(QWidget):
 
         layout = QVBoxLayout(self)
         form = QFormLayout()
-        form.addRow("Langage:", self._language)
+        form.addRow(t("form.script.language"), self._language)
         layout.addLayout(form)
-        layout.addWidget(QLabel("Corps:"))
+        layout.addWidget(QLabel(t("form.script.body")))
         layout.addWidget(self._body)
 
     def set_data(self, data: dict) -> None:
@@ -85,9 +86,9 @@ class DataEditor(QWidget):
 
         layout = QVBoxLayout(self)
         form = QFormLayout()
-        form.addRow("Commande:", self._command)
+        form.addRow(t("form.data.command"), self._command)
         layout.addLayout(form)
-        layout.addWidget(QLabel("Contenu:"))
+        layout.addWidget(QLabel(t("form.data.content")))
         layout.addWidget(self._content)
 
     def set_data(self, data: dict) -> None:
@@ -102,7 +103,7 @@ class IfEditor(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._condition = QLineEdit()
-        QFormLayout(self).addRow("Condition:", self._condition)
+        QFormLayout(self).addRow(t("form.if.condition"), self._condition)
 
     def set_data(self, data: dict) -> None:
         self._condition.setText(data.get("condition", ""))
@@ -116,7 +117,7 @@ class LoopEditor(QWidget):
         super().__init__(parent)
         self._index           = QLineEdit()
         self._mode_range      = QRadioButton("Range")
-        self._mode_list       = QRadioButton("Liste")
+        self._mode_list       = QRadioButton(t("form.loop.mode.list"))
         self._mode_expression = QRadioButton("Expression")
         self._mode_range.setChecked(True)
         self._mode_group = QButtonGroup(self)
@@ -132,10 +133,10 @@ class LoopEditor(QWidget):
         self._step.setRange(1, 9999)
         self._step.setValue(1)
         self._items = QTextEdit()
-        self._items.setPlaceholderText("Un item par ligne")
+        self._items.setPlaceholderText(t("form.loop.items.placeholder"))
 
         self._expression = CodeEdit()
-        self._expression.setPlaceholderText("Commande bash produisant les items")
+        self._expression.setPlaceholderText(t("form.loop.expression.placeholder"))
 
         # The loop expression is always bash -- nothing to connect.
         self._highlighter = PygmentsHighlighter(self._expression.document(), "bash")
@@ -162,13 +163,13 @@ class LoopEditor(QWidget):
         )
 
         mode_row = QFormLayout()
-        mode_row.addRow("Mode:", self._mode_range)
+        mode_row.addRow(t("form.loop.mode"), self._mode_range)
         mode_row.addRow("", self._mode_list)
         mode_row.addRow("", self._mode_expression)
 
         layout = QVBoxLayout(self)
         form = QFormLayout()
-        form.addRow("Index:", self._index)
+        form.addRow(t("form.loop.index"), self._index)
         layout.addLayout(form)
         layout.addLayout(mode_row)
         layout.addWidget(self._stack)

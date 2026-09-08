@@ -20,6 +20,7 @@ from flower.app.prefs.interpreters import load_interpreters
 from flower.app.prefs.recent import add_recent, clear_recent, load_recent, remove_recent
 from flower.app.prefs.terminal import load_terminal
 from flower.app.prefs.editor import load_editor
+from flower.i18n import t
 from flower.version import get_version
 
 # (background, text) pairs, keyed by whether the app is currently dark.
@@ -47,9 +48,9 @@ class MainWindow(QMainWindow):
         self._toolbar     = ToolBar(self)
         self._canvas      = GraphCanvas()
         self._dock_panel  = DockPanel()
-        self._notes       = NotesPanel(title="Description")
+        self._notes       = NotesPanel(title=t("panel.description.title"))
         self._notes.text_changed.connect(self._on_notes_changed)
-        self._global_vars = VarsPanel(title="Variables globales")
+        self._global_vars = VarsPanel(title=t("panel.vars.global_title"))
         self._global_vars.variables_changed.connect(self._on_global_vars_changed)
 
         self._apply_theme_colors()
@@ -90,37 +91,37 @@ class MainWindow(QMainWindow):
     # ── Menu ────────────────────────────────────────────────────────────────
 
     def _build_menu(self) -> None:
-        file_menu = self.menuBar().addMenu("Fichier")
-        file_menu.addAction("Nouveau",       self._new_file,  "Ctrl+N")
-        file_menu.addAction("Ouvrir…",       self._open_file, "Ctrl+O")
-        self._recent_menu = file_menu.addMenu("Ouvrir récents")
+        file_menu = self.menuBar().addMenu(t("menu.file"))
+        file_menu.addAction(t("menu.file.new"),     self._new_file,  "Ctrl+N")
+        file_menu.addAction(t("menu.file.open"),    self._open_file, "Ctrl+O")
+        self._recent_menu = file_menu.addMenu(t("menu.file.recent"))
         self._refresh_recent_menu()
-        file_menu.addAction("Sauver",        self._save_file, "Ctrl+S")
-        file_menu.addAction("Sauver sous…",  self._save_as,   "Ctrl+Shift+S")
+        file_menu.addAction(t("menu.file.save"),    self._save_file, "Ctrl+S")
+        file_menu.addAction(t("menu.file.save_as"), self._save_as,   "Ctrl+Shift+S")
         file_menu.addSeparator()
-        file_menu.addAction("Préférences…",  self._open_preferences)
+        file_menu.addAction(t("menu.file.preferences"), self._open_preferences)
         file_menu.addSeparator()
-        file_menu.addAction("Quitter",       self.close,      "Ctrl+Q")
+        file_menu.addAction(t("menu.file.quit"),    self.close,      "Ctrl+Q")
 
-        exec_menu = self.menuBar().addMenu("Exécution")
-        exec_menu.addAction("Générer le script", self._generate_script, "Alt+G")
-        exec_menu.addAction("Lancer le script",  self._launch_script, "Alt+R")
+        exec_menu = self.menuBar().addMenu(t("menu.exec"))
+        exec_menu.addAction(t("menu.exec.generate"), self._generate_script, "Alt+G")
+        exec_menu.addAction(t("menu.exec.launch"),   self._launch_script, "Alt+R")
         exec_menu.addSeparator()
-        exec_menu.addAction("Exporter en .dot",             self._export_dot)
-        exec_menu.addAction("Exporter en .dot (actifs)",    self._export_dot_active)
+        exec_menu.addAction(t("menu.exec.export_dot"),        self._export_dot)
+        exec_menu.addAction(t("menu.exec.export_dot_active"), self._export_dot_active)
         exec_menu.addSeparator()
-        exec_menu.addAction("Ouvrir un terminal ici", self._open_terminal, "Alt+O")
+        exec_menu.addAction(t("menu.exec.terminal"), self._open_terminal, "Alt+O")
 
-        help_menu = self.menuBar().addMenu("Aide")
-        help_menu.addAction("À propos de Flower", self._show_about)
+        help_menu = self.menuBar().addMenu(t("menu.help"))
+        help_menu.addAction(t("menu.help.about"), self._show_about)
 
     def _open_preferences(self) -> None:
         PreferencesDialog(self).exec()
 
     def _show_about(self) -> None:
         QMessageBox.about(
-            self, "À propos de Flower",
-            f"<b>Flower</b> {get_version()}<br><br>Éditeur de graphes d'exécution.",
+            self, t("dialog.about.title"),
+            t("dialog.about.body", version=get_version()),
         )
 
     def _connect_signals(self) -> None:
@@ -145,8 +146,7 @@ class MainWindow(QMainWindow):
         if not self._flow.is_dirty:
             return True
         r = QMessageBox.question(
-            self, "Modifications non sauvegardées",
-            "Des modifications non sauvegardées seront perdues. Continuer ?",
+            self, t("dialog.unsaved.title"), t("dialog.unsaved.body"),
         )
         return r == QMessageBox.StandardButton.Yes
 
@@ -158,14 +158,19 @@ class MainWindow(QMainWindow):
     def _open_file(self) -> None:
         if not self._confirm_discard():
             return
-        path, _ = QFileDialog.getOpenFileName(self, "Ouvrir", "", "Flow files (*.flow)")
+        path, _ = QFileDialog.getOpenFileName(
+            self, t("dialog.open.title"), "", t("dialog.flow_filter")
+        )
         if not path:
             return
         self._open_path(Path(path))
 
     def _open_path(self, path: Path) -> None:
         if not path.exists():
-            QMessageBox.warning(self, "Fichier introuvable", f"Le fichier n'existe plus :\n{path}")
+            QMessageBox.warning(
+                self, t("dialog.missing_file.title"),
+                t("dialog.missing_file.body", path=path),
+            )
             remove_recent(path)
             self._refresh_recent_menu()
             return
@@ -191,17 +196,19 @@ class MainWindow(QMainWindow):
             return
         self._flow.save()
         self._update_title()
-        self.statusBar().showMessage("Fichier sauvegardé", 3000)
+        self.statusBar().showMessage(t("status.saved"), 3000)
         add_recent(self._flow.path)
         self._refresh_recent_menu()
 
     def _save_as(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(self, "Sauver sous", "", "Flow files (*.flow)")
+        path, _ = QFileDialog.getSaveFileName(
+            self, t("dialog.save_as.title"), "", t("dialog.flow_filter")
+        )
         if not path:
             return
         self._flow.save(Path(path if path.endswith(".flow") else path + ".flow"))
         self._update_title()
-        self.statusBar().showMessage("Fichier sauvegardé", 3000)
+        self.statusBar().showMessage(t("status.saved"), 3000)
         add_recent(self._flow.path)
         self._refresh_recent_menu()
 
@@ -211,12 +218,12 @@ class MainWindow(QMainWindow):
         path = self._flow.write_script(interpreters=load_interpreters())
         # The script exists from here on, so its success is reported first: a
         # missing editor command must not read as a failed generation.
-        self.statusBar().showMessage(f"Script généré : {path.name}", 3000)
+        self.statusBar().showMessage(t("status.script_generated", name=path.name), 3000)
         editor = load_editor()
         if not self._flow.open_editor(editor=editor):
             QMessageBox.warning(
-                self, "Échec de l'ouverture",
-                f"Impossible de lancer l'éditeur « {editor} ».",
+                self, t("dialog.editor_failed.title"),
+                t("dialog.editor_failed.body", editor=editor),
             )
 
     def _launch_script(self) -> None:
@@ -224,11 +231,11 @@ class MainWindow(QMainWindow):
             return
         path = self._flow.run(interpreters=load_interpreters(), terminal=load_terminal())
         if path is not None:
-            self.statusBar().showMessage(f"Script lancé : {path.name}", 3000)
+            self.statusBar().showMessage(t("status.script_launched", name=path.name), 3000)
         else:
             QMessageBox.warning(
-                self, "Échec du lancement",
-                "Impossible d'ouvrir un terminal pour exécuter le script.",
+                self, t("dialog.launch_failed.title"),
+                t("dialog.launch_failed.no_terminal"),
             )
 
     def _open_terminal(self) -> None:
@@ -236,24 +243,26 @@ class MainWindow(QMainWindow):
         which is precisely what this shortcut is for."""
         terminal = load_terminal()
         if self._flow.open_terminal(terminal=terminal):
-            self.statusBar().showMessage(f"Terminal ouvert : {self._flow.work_dir()}", 3000)
+            self.statusBar().showMessage(
+                t("status.terminal_opened", path=self._flow.work_dir()), 3000
+            )
         else:
             QMessageBox.warning(
-                self, "Échec du lancement",
-                f"Impossible d'ouvrir le terminal « {terminal} ».",
+                self, t("dialog.launch_failed.title"),
+                t("dialog.launch_failed.terminal", terminal=terminal),
             )
 
     def _export_dot(self) -> None:
         if not self._ensure_saved():
             return
         path = self._flow.export_dot()
-        self.statusBar().showMessage(f"Graphe exporté : {path.name}", 3000)
+        self.statusBar().showMessage(t("status.dot_exported", name=path.name), 3000)
 
     def _export_dot_active(self) -> None:
         if not self._ensure_saved():
             return
         path = self._flow.export_dot_active()
-        self.statusBar().showMessage(f"Graphe exporté : {path.name}", 3000)
+        self.statusBar().showMessage(t("status.dot_exported", name=path.name), 3000)
 
     def _ensure_saved(self) -> bool:
         """A script is written next to the .flow, so an unsaved flow has
@@ -280,18 +289,18 @@ class MainWindow(QMainWindow):
         ancestor = node.parent
         while ancestor is not None:
             if not ancestor.is_active:
-                self.statusBar().showMessage("Un nœud parent est inactif : rien à exécuter.", 3000)
+                self.statusBar().showMessage(t("status.inactive_ancestor"), 3000)
                 return
             ancestor = ancestor.parent
         if not self._ensure_saved():
             return
         path = self._flow.run(node_id, interpreters=load_interpreters(), terminal=load_terminal())
         if path is not None:
-            self.statusBar().showMessage(f"Exécution partielle : {path.name}", 3000)
+            self.statusBar().showMessage(t("status.partial_exec", name=path.name), 3000)
         else:
             QMessageBox.warning(
-                self, "Échec du lancement",
-                "Impossible d'ouvrir un terminal pour exécuter le script.",
+                self, t("dialog.launch_failed.title"),
+                t("dialog.launch_failed.no_terminal"),
             )
 
     # ── Node operations ─────────────────────────────────────────────────────
@@ -320,7 +329,7 @@ class MainWindow(QMainWindow):
         self._update_title()
         self._canvas.refresh_layout()
         self._status_node_label.clear()
-        self.statusBar().showMessage("Nœud supprimé", 3000)
+        self.statusBar().showMessage(t("status.node_deleted"), 3000)
 
     # ── Editor windows ───────────────────────────────────────────────────────
 
@@ -413,7 +422,7 @@ class MainWindow(QMainWindow):
         self._canvas.refresh_layout()
         win = self._editor_windows.get(node_id)
         if win:
-            win.setWindowTitle(f"Éditer — {node.type} · {new_name}")
+            win.setWindowTitle(t("dialog.editor.title", type=node.type, name=new_name))
 
     def _on_notes_changed(self, text: str) -> None:
         if self._flow.graph.notes == text:
@@ -447,16 +456,18 @@ class MainWindow(QMainWindow):
         menu.clear()
         items = load_recent()
         if not items:
-            act = menu.addAction("(aucun)")
+            act = menu.addAction(t("menu.file.recent.empty"))
             act.setEnabled(False)
             return
         for p in items:
             path = Path(p)
-            act = menu.addAction(f"{path.name}  —  {path.parent}")
+            act = menu.addAction(
+                t("menu.file.recent.entry", name=path.name, folder=path.parent)
+            )
             act.setToolTip(p)
             act.triggered.connect(lambda _checked=False, path=path: self._open_recent(path))
         menu.addSeparator()
-        clear_act = menu.addAction("Vider la liste")
+        clear_act = menu.addAction(t("menu.file.recent.clear"))
         clear_act.triggered.connect(self._clear_recent)
 
     def _open_recent(self, path: Path) -> None:
@@ -469,11 +480,13 @@ class MainWindow(QMainWindow):
         self._refresh_recent_menu()
 
     def _update_status_node(self, node: Node) -> None:
-        active = "actif" if node.is_active else "inactif"
-        self._status_node_label.setText(f"{node.type} · {node.name} · {active}")
+        state = t("status.node.active") if node.is_active else t("status.node.inactive")
+        self._status_node_label.setText(
+            t("status.node", type=node.type, name=node.name, state=state)
+        )
 
     def _update_title(self) -> None:
-        name  = self._flow.path.name if self._flow.path else "Sans titre"
+        name  = self._flow.path.name if self._flow.path else t("window.untitled")
         dirty = " *" if self._flow.is_dirty else ""
         self.setWindowTitle(f"Flower — {name}{dirty}")
 

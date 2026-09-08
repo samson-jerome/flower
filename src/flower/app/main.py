@@ -3,7 +3,9 @@ import sys
 from pathlib import Path
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
+from flower import i18n
 from flower.app.main_window import MainWindow
+from flower.app.prefs.language import install_qt_translator, load_language
 from flower.app.prefs.theme import apply_theme, load_theme, watch_system_theme
 from flower.version import get_version
 
@@ -27,6 +29,11 @@ def main() -> None:
     app.setDesktopFileName("flower")
     apply_theme(app, load_theme())
     watch_system_theme(app)
+    # Before MainWindow(): widgets resolve their strings as they are built,
+    # and the language only changes on restart.
+    language = load_language()
+    i18n.load(language)
+    install_qt_translator(app, language)
     icon = QIcon(str(ICON_PATH))
     app.setWindowIcon(icon)
     window = MainWindow()

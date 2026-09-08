@@ -7,6 +7,8 @@ from flower.engine.api import FlowGraph
 from flower.engine.models.graph import Graph
 from flower.engine.models.node import Node, NodeType
 from flower.app.main_window import MainWindow
+from flower import i18n
+from flower.i18n import t
 from flower.version import get_version
 
 
@@ -87,7 +89,7 @@ def test_exec_node_ignores_an_active_node_under_an_inactive_ancestor(qapp, tmp_p
 
     assert launched == []
     assert list(tmp_path.iterdir()) == []
-    assert win.statusBar().currentMessage() == "Un nœud parent est inactif : rien à exécuter."
+    assert win.statusBar().currentMessage() == t("status.inactive_ancestor")
 
 
 def test_exec_node_ignores_an_unknown_id(qapp, tmp_path, monkeypatch):
@@ -207,10 +209,10 @@ def test_the_terminal_action_opens_the_flow_folder(qapp, tmp_path, monkeypatch):
     win, _ = _window(Graph(), tmp_path / "demo.flow", monkeypatch)
 
     menu_bar_actions = win.menuBar().actions()
-    exec_action = next(a for a in menu_bar_actions if a.text() == "Exécution")
+    exec_action = next(a for a in menu_bar_actions if a.text() == t("menu.exec"))
     exec_menu = exec_action.menu()
     terminal_entry = next(
-        a for a in exec_menu.actions() if a.text() == "Ouvrir un terminal ici"
+        a for a in exec_menu.actions() if a.text() == t("menu.exec.terminal")
     )
 
     terminal_entry.trigger()
@@ -272,9 +274,9 @@ def test_generate_script_opens_the_folder_in_the_editor(qapp, tmp_path, monkeypa
     win, _ = _window(Graph(roots=[_script_node("root")]), tmp_path / "demo.flow", monkeypatch)
 
     menu_bar_actions = win.menuBar().actions()
-    exec_action = next(a for a in menu_bar_actions if a.text() == "Exécution")
+    exec_action = next(a for a in menu_bar_actions if a.text() == t("menu.exec"))
     exec_menu = exec_action.menu()
-    generate = next(a for a in exec_menu.actions() if a.text() == "Générer le script")
+    generate = next(a for a in exec_menu.actions() if a.text() == t("menu.exec.generate"))
 
     generate.trigger()
 
@@ -299,3 +301,23 @@ def test_a_failing_editor_does_not_lose_the_generated_script(qapp, tmp_path, mon
     assert (tmp_path / "demo.sh").exists()
     assert len(warned) == 1
     assert "code" in warned[0]
+
+
+def test_the_english_catalog_resolves_to_english_ui(qapp, tmp_path, monkeypatch):
+    """Nothing else in the suite ever builds a widget with "en" active, so an
+    English value silently left as its French text would be invisible to CI.
+    Expected strings are hardcoded literals here on purpose: comparing
+    against t(...) would not catch a value that was never translated, since
+    both sides would move together.
+
+    Restores "fr" in a finally so a failure here cannot leak the language
+    into the rest of the session."""
+    try:
+        i18n.load("en")
+        win, _ = _window(Graph(), None, monkeypatch)
+
+        menu_bar_actions = win.menuBar().actions()
+        assert [a.text() for a in menu_bar_actions] == ["File", "Run", "Help"]
+        assert win.windowTitle() == "Flower — Untitled"
+    finally:
+        i18n.load("fr")

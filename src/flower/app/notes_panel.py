@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Signal, Qt, QSize
 from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor
 from PySide6.QtSvg import QSvgRenderer
+from flower.i18n import t
 
 _ASSETS_DIR = Path(__file__).resolve().parents[3] / "assets" / "icons"
 _ICON_EXPANDED = _ASSETS_DIR / "chevron-down.svg"
@@ -123,10 +124,13 @@ class NotesPanel(CollapsibleSection):
 
     text_changed = Signal(str)
 
-    def __init__(self, title: str = "Description", parent=None):
+    def __init__(self, title: str | None = None, parent=None):
+        # Resolved here and not in the signature: a default argument is
+        # evaluated at import time, before main() loads the catalog.
         editor = QTextEdit()
-        editor.setPlaceholderText("Add a description...")
-        super().__init__(title, editor, parent)
+        editor.setPlaceholderText(t("panel.description.placeholder"))
+        super().__init__(title if title is not None else t("panel.description.title"),
+                         editor, parent)
         self._editor = editor
         self._editor.textChanged.connect(
             lambda: self.text_changed.emit(self._editor.toPlainText())

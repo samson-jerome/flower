@@ -6,23 +6,27 @@ from PySide6.QtWidgets import (
 )
 from flower.engine.models.node import Variable, VariableOperation
 from flower.app.notes_panel import CollapsibleSection
+from flower.i18n import t
 
 
 class VarsPanel(CollapsibleSection):
     """Tableau éditable de Variables (globales ou locales), repliable."""
 
-    COLUMNS = ("Nom", "Valeur", "Description", "Actif", "Op.")
-    OPERATIONS = (
-        (VariableOperation.ASSIGN, "Assignation"),
-        (VariableOperation.CONCAT, "Concaténation"),
-        (VariableOperation.ADD,    "Addition"),
-    )
-
     variables_changed = Signal()
 
-    def __init__(self, title: str = "Variables", parent=None):
-        table = QTableWidget(0, len(self.COLUMNS))
-        table.setHorizontalHeaderLabels(list(self.COLUMNS))
+    def __init__(self, title: str | None = None, parent=None):
+        # Columns and operation labels are built here, not as class
+        # attributes: a class body runs at import time, before main() loads
+        # the catalog.
+        columns = (
+            t("panel.vars.col.name"),
+            t("panel.vars.col.value"),
+            t("panel.vars.col.description"),
+            t("panel.vars.col.active"),
+            t("panel.vars.col.operation"),
+        )
+        table = QTableWidget(0, len(columns))
+        table.setHorizontalHeaderLabels(list(columns))
         table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
 
@@ -42,8 +46,16 @@ class VarsPanel(CollapsibleSection):
         layout.addLayout(btn_layout)
         layout.addWidget(table)
 
-        super().__init__(title, content, parent)
+        super().__init__(title if title is not None else t("panel.vars.title"),
+                         content, parent)
         self._table = table
+        # Assigned after super(): setting a Python attribute on a QObject
+        # whose C++ base is not initialised yet raises.
+        self._operations = (
+            (VariableOperation.ASSIGN, t("panel.vars.op.assign")),
+            (VariableOperation.CONCAT, t("panel.vars.op.concat")),
+            (VariableOperation.ADD,    t("panel.vars.op.add")),
+        )
         add_btn.clicked.connect(self._add_row)
         del_btn.clicked.connect(self._delete_selected)
         table.itemChanged.connect(lambda _item: self.variables_changed.emit())
@@ -56,7 +68,7 @@ class VarsPanel(CollapsibleSection):
 
     def _make_op_combo(self, operation: str) -> QComboBox:
         combo = QComboBox()
-        for code, label in self.OPERATIONS:
+        for code, label in self._operations:
             combo.addItem(label, code)
         idx = combo.findData(operation)
         combo.setCurrentIndex(idx if idx >= 0 else 0)

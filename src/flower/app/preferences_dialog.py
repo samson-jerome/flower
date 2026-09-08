@@ -3,10 +3,11 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFontMetrics, QPalette
 from PySide6.QtWidgets import (
     QApplication, QButtonGroup, QComboBox, QDialog, QFormLayout, QGroupBox,
-    QLineEdit, QPushButton, QRadioButton, QSpinBox, QVBoxLayout,
+    QLabel, QLineEdit, QPushButton, QRadioButton, QSpinBox, QVBoxLayout,
 )
 from pygments.styles import get_style_by_name
 from pygments.token import Token
+from flower.i18n import AVAILABLE_LANGUAGES, t
 from flower.app.prefs.theme import Theme, apply_theme, load_theme, save_theme
 from flower.app.prefs.interpreters import load_interpreters, save_interpreter
 from flower.app.prefs.highlight_styles import DARK_STYLES, LIGHT_STYLES, load_style, save_style
@@ -15,6 +16,7 @@ from flower.app.prefs.indent import (
 )
 from flower.app.prefs.terminal import load_terminal, save_terminal
 from flower.app.prefs.editor import load_editor, save_editor
+from flower.app.prefs.language import load_language, save_language
 from flower.app.editor.code_edit import CodeEdit
 from flower.app.editor.highlighter import PygmentsHighlighter
 
@@ -24,16 +26,6 @@ _INTERPRETER_LABELS = {
     "powershell": "PowerShell",
     "javascript": "JavaScript (node)",
 }
-
-# Bash, because it is what both highlighted fields default to. Short enough to
-# stay unobtrusive, varied enough to exercise comment, keyword, string and
-# variable -- the four token families that separate one style from another.
-_PREVIEW_SNIPPET = (
-    '# archive les journaux\n'
-    'for f in "$SRC"/*.log; do\n'
-    '    gzip -9 "$f" && echo "ok: $f"\n'
-    'done'
-)
 
 
 class _StylePreview(CodeEdit):
@@ -46,8 +38,13 @@ class _StylePreview(CodeEdit):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setReadOnly(True)
-        self.setPlainText(_PREVIEW_SNIPPET)
-        lines = _PREVIEW_SNIPPET.count("\n") + 1
+        # Bash, because it is what both highlighted fields default to. Short
+        # enough to stay unobtrusive, varied enough to exercise comment,
+        # keyword, string and variable -- the four token families that
+        # separate one style from another.
+        snippet = t("dialog.prefs.preview_snippet")
+        self.setPlainText(snippet)
+        lines = snippet.count("\n") + 1
         self.setFixedHeight(QFontMetrics(self.font()).lineSpacing() * lines + 16)
         self._highlighter = PygmentsHighlighter(self.document(), "bash")
 
@@ -79,69 +76,88 @@ class PreferencesDialog(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Préférences")
+        self.setWindowTitle(t("dialog.prefs.title"))
 
-        display_group = QGroupBox("Affichage")
+        display_group = QGroupBox(t("dialog.prefs.display"))
         group_layout = QVBoxLayout()
         button_group = QButtonGroup(self)
         self._radios = {
-            Theme.LIGHT:  QRadioButton("Clair"),
-            Theme.DARK:   QRadioButton("Sombre"),
-            Theme.SYSTEM: QRadioButton("Suivre le système"),
+            Theme.LIGHT:  QRadioButton(t("dialog.prefs.theme.light")),
+            Theme.DARK:   QRadioButton(t("dialog.prefs.theme.dark")),
+            Theme.SYSTEM: QRadioButton(t("dialog.prefs.theme.system")),
         }
         for theme, radio in self._radios.items():
             group_layout.addWidget(radio)
             button_group.addButton(radio)
-            radio.toggled.connect(lambda checked, t=theme: checked and self._set_theme(t))
+            radio.toggled.connect(lambda checked, th=theme: checked and self._set_theme(th))
         self._radios[load_theme()].setChecked(True)
+
+        self._opened_language = load_language()
+        self._language_combo = QComboBox()
+        for code, label in AVAILABLE_LANGUAGES.items():
+            self._language_combo.addItem(label, code)
+        self._language_combo.setCurrentIndex(
+            self._language_combo.findData(self._opened_language)
+        )
+        self._language_notice = QLabel(t("dialog.prefs.language.restart"))
+        self._language_notice.setWordWrap(True)
+        self._language_notice.setVisible(False)
+        # Connected after setCurrentIndex, so preselecting does not fire it
+        # and show the notice before the user has chosen anything.
+        self._language_combo.currentIndexChanged.connect(self._on_language_changed)
+
+        language_form = QFormLayout()
+        language_form.addRow(t("dialog.prefs.language"), self._language_combo)
+        group_layout.addLayout(language_form)
+        group_layout.addWidget(self._language_notice)
         display_group.setLayout(group_layout)
 
-        interp_group = QGroupBox("Interprètes")
+        interp_group = QGroupBox(t("dialog.prefs.interpreters"))
         interp_form = QFormLayout()
         self._interp_edits: dict[str, QLineEdit] = {}
         interpreters = load_interpreters()
         for lang, label in _INTERPRETER_LABELS.items():
             edit = QLineEdit(interpreters[lang])
             edit.editingFinished.connect(lambda l=lang, e=edit: save_interpreter(l, e.text()))
-            interp_form.addRow(f"{label} :", edit)
+            interp_form.addRow(t("dialog.prefs.interpreter_row", label=label), edit)
             self._interp_edits[lang] = edit
         interp_group.setLayout(interp_form)
 
-        exec_group = QGroupBox("Exécution")
+        exec_group = QGroupBox(t("dialog.prefs.exec"))
         exec_form = QFormLayout()
         self._terminal_edit = QLineEdit(load_terminal())
         self._terminal_edit.editingFinished.connect(
             lambda: save_terminal(self._terminal_edit.text())
         )
-        exec_form.addRow("Terminal :", self._terminal_edit)
+        exec_form.addRow(t("dialog.prefs.terminal"), self._terminal_edit)
         self._editor_edit = QLineEdit(load_editor())
         self._editor_edit.editingFinished.connect(
             lambda: save_editor(self._editor_edit.text())
         )
-        exec_form.addRow("Éditeur :", self._editor_edit)
+        exec_form.addRow(t("dialog.prefs.editor"), self._editor_edit)
         exec_group.setLayout(exec_form)
 
-        highlight_group = QGroupBox("Coloration syntaxique")
+        highlight_group = QGroupBox(t("dialog.prefs.highlight"))
         highlight_layout = QVBoxLayout()
         self._light_combo, self._light_preview = self._style_row(
-            highlight_layout, "Thème clair :", LIGHT_STYLES, dark=False
+            highlight_layout, t("dialog.prefs.highlight.light"), LIGHT_STYLES, dark=False
         )
         self._dark_combo, self._dark_preview = self._style_row(
-            highlight_layout, "Thème sombre :", DARK_STYLES, dark=True
+            highlight_layout, t("dialog.prefs.highlight.dark"), DARK_STYLES, dark=True
         )
         highlight_group.setLayout(highlight_layout)
 
-        edit_group = QGroupBox("Édition")
+        edit_group = QGroupBox(t("dialog.prefs.edit"))
         edit_form = QFormLayout()
         self._indent_spin = QSpinBox()
         self._indent_spin.setRange(MIN_INDENT_WIDTH, MAX_INDENT_WIDTH)
         self._indent_spin.setValue(load_indent_width())
-        self._indent_spin.setSuffix(" espaces")
+        self._indent_spin.setSuffix(t("dialog.prefs.indent.suffix"))
         self._indent_spin.valueChanged.connect(save_indent_width)
-        edit_form.addRow("Largeur d'indentation :", self._indent_spin)
+        edit_form.addRow(t("dialog.prefs.indent"), self._indent_spin)
         edit_group.setLayout(edit_form)
 
-        close_btn = QPushButton("Fermer")
+        close_btn = QPushButton(t("dialog.prefs.close"))
         close_btn.clicked.connect(self.accept)
 
         layout = QVBoxLayout(self)
@@ -176,3 +192,8 @@ class PreferencesDialog(QDialog):
     def _set_theme(self, theme: Theme) -> None:
         save_theme(theme)
         apply_theme(QApplication.instance(), theme)
+
+    def _on_language_changed(self, _index: int) -> None:
+        selected = self._language_combo.currentData()
+        save_language(selected)
+        self._language_notice.setVisible(selected != self._opened_language)
