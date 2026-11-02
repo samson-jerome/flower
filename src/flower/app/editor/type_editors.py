@@ -1,14 +1,9 @@
 from __future__ import annotations
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QFormLayout,
-    QLineEdit, QTextEdit, QSpinBox,
-    QRadioButton, QButtonGroup, QStackedWidget, QApplication,
-)
-from qt_parameters import ComboParameter, ParameterForm, ParameterWidget
+from PySide6.QtWidgets import QWidget, QStackedWidget, QApplication
+from qt_parameters import ComboParameter, IntParameter, ParameterForm, ParameterWidget
 from flower.engine.models.node import NodeType
 from flower.app.prefs import highlight_styles
-from flower.app.editor.code_edit import CodeEdit
 from flower.app.editor.highlighter import PygmentsHighlighter
 from flower.app.editor.params import (
     CodeParameter, LiveStringParameter, setup_form, stretch_last_row,
@@ -125,102 +120,100 @@ class IfEditor(ParameterForm):
         return {"condition": self._condition.value()}
 
 
-class LoopEditor(QWidget):
+LOOP_MODES: tuple[str, ...] = ("range", "list", "expression")
+_START_END_BOUNDS = (-9999, 9999)
+_STEP_BOUNDS = (1, 9999)
+
+
+def _bounded_int(name: str, low: int, high: int) -> IntParameter:
+    param = IntParameter(name)
+    param.set_slider_visible(False)
+    param.set_line_min(low)
+    param.set_line_max(high)
+    param.set_commit_on_edit(True)
+    param.set_value(max(low, 0))
+    return param
+
+
+def _clamp(value, low: int, high: int) -> int:
+    return min(max(int(value), low), high)
+
+
+class LoopEditor(ParameterForm):
     def __init__(self, parent=None):
-        super().__init__(parent)
-        self._index           = QLineEdit()
-        self._mode_range      = QRadioButton("Range")
-        self._mode_list       = QRadioButton(t("form.loop.mode.list"))
-        self._mode_expression = QRadioButton("Expression")
-        self._mode_range.setChecked(True)
-        self._mode_group = QButtonGroup(self)
-        self._mode_group.addButton(self._mode_range)
-        self._mode_group.addButton(self._mode_list)
-        self._mode_group.addButton(self._mode_expression)
+        super().__init__(name=NodeType.LOOP.value, parent=parent)
+        setup_form(self, nested=True)
+        self._index = _labelled(LiveStringParameter("index"), t("form.loop.index"))
+        self._mode  = _labelled(ComboParameter("mode"), t("form.loop.mode"))
+        self._mode.set_items(dict(zip(
+            ("Range", t("form.loop.mode.list"), "Expression"), LOOP_MODES
+        )))
 
-        self._start = QSpinBox()
-        self._start.setRange(-9999, 9999)
-        self._end   = QSpinBox()
-        self._end.setRange(-9999, 9999)
-        self._step  = QSpinBox()
-        self._step.setRange(1, 9999)
-        self._step.setValue(1)
-        self._items = QTextEdit()
-        self._items.setPlaceholderText(t("form.loop.items.placeholder"))
-
-        self._expression = CodeEdit()
-        self._expression.setPlaceholderText(t("form.loop.expression.placeholder"))
+        self._start = _labelled(_bounded_int("start", *_START_END_BOUNDS), "Start:")
+        self._end   = _labelled(_bounded_int("end", *_START_END_BOUNDS), "End:")
+        self._step  = _labelled(_bounded_int("step", *_STEP_BOUNDS), "Step:")
+        self._items = _labelled(LiveStringParameter("items"), "")
+        self._items.set_area(True)
+        self._items.set_placeholder(t("form.loop.items.placeholder"))
+        self._expression = _labelled(CodeParameter("expression"), "")
+        self._expression.set_placeholder(t("form.loop.expression.placeholder"))
 
         # The loop expression is always bash -- nothing to connect.
-        self._highlighter = PygmentsHighlighter(self._expression.document(), "bash")
+        self._highlighter = PygmentsHighlighter(self._expression.edit.document(), "bash")
         _follow_theme(self._highlighter)
 
+        # One page per mode, in LOOP_MODES order.
         self._stack = QStackedWidget()
-        range_widget = QWidget()
-        range_form = QFormLayout(range_widget)
-        range_form.addRow("Start:", self._start)
-        range_form.addRow("End:", self._end)
-        range_form.addRow("Step:", self._step)
-        self._stack.addWidget(range_widget)      # index 0 = range
-        self._stack.addWidget(self._items)       # index 1 = list
-        self._stack.addWidget(self._expression)  # index 2 = expression
+        pages = (
+            (self._start, self._end, self._step),
+            (self._items,),
+            (self._expression,),
+        )
+        for mode, params in zip(LOOP_MODES, pages):
+            page = setup_form(ParameterForm(name=mode), nested=True)
+            for param in params:
+                page.add_parameter(param)
+            stretch_last_row(page)
+            self._stack.addWidget(page)
 
-        self._mode_range.toggled.connect(
-            lambda checked: self._stack.setCurrentIndex(0) if checked else None
-        )
-        self._mode_list.toggled.connect(
-            lambda checked: self._stack.setCurrentIndex(1) if checked else None
-        )
-        self._mode_expression.toggled.connect(
-            lambda checked: self._stack.setCurrentIndex(2) if checked else None
+        self._mode.value_changed.connect(
+            lambda mode: self._stack.setCurrentIndex(LOOP_MODES.index(mode))
         )
 
-        mode_row = QFormLayout()
-        mode_row.addRow(t("form.loop.mode"), self._mode_range)
-        mode_row.addRow("", self._mode_list)
-        mode_row.addRow("", self._mode_expression)
-
-        layout = QVBoxLayout(self)
-        form = QFormLayout()
-        form.addRow(t("form.loop.index"), self._index)
-        layout.addLayout(form)
-        layout.addLayout(mode_row)
-        layout.addWidget(self._stack)
+        self.add_parameter(self._index)
+        self.add_parameter(self._mode)
+        self.add_widget(self._stack)
+        stretch_last_row(self)
 
     def set_data(self, data: dict) -> None:
         """Any mode value other than "list"/"expression" (including
-        unrecognized legacy values) selects range, matching _loop_header()."""
-        self._index.setText(data.get("index", ""))
+        unrecognized legacy values) selects range, matching _loop_header().
+        Numbers are clamped to the field bounds, as the spin boxes used to."""
+        self._index.set_value(data.get("index", ""))
         mode = data.get("mode", "range")
-        if mode == "list":
-            self._mode_list.setChecked(True)
-        elif mode == "expression":
-            self._mode_expression.setChecked(True)
-        else:
-            self._mode_range.setChecked(True)
-        self._start.setValue(int(data.get("start", 0)))
-        self._end.setValue(int(data.get("end", 0)))
-        self._step.setValue(int(data.get("step", 1)))
-        self._items.setPlainText(data.get("items", ""))
-        self._expression.setPlainText(data.get("expression", ""))
+        if mode not in LOOP_MODES:
+            mode = "range"
+        self._mode.set_value(mode)
+        # Set it explicitly: assigning the value that is already current emits
+        # no signal, so the stack would keep showing the previous page.
+        self._stack.setCurrentIndex(LOOP_MODES.index(mode))
+        self._start.set_value(_clamp(data.get("start", 0), *_START_END_BOUNDS))
+        self._end.set_value(_clamp(data.get("end", 0), *_START_END_BOUNDS))
+        self._step.set_value(_clamp(data.get("step", 1), *_STEP_BOUNDS))
+        self._items.set_value(data.get("items", ""))
+        self._expression.set_value(data.get("expression", ""))
 
     def get_data(self) -> dict:
         """Every key is returned whatever the active mode, so the inactive
         modes' values survive a round trip through the editor."""
-        if self._mode_list.isChecked():
-            mode = "list"
-        elif self._mode_expression.isChecked():
-            mode = "expression"
-        else:
-            mode = "range"
         return {
-            "index":      self._index.text(),
-            "mode":       mode,
+            "index":      self._index.value(),
+            "mode":       self._mode.value(),
             "start":      self._start.value(),
             "end":        self._end.value(),
             "step":       self._step.value(),
-            "items":      self._items.toPlainText(),
-            "expression": self._expression.toPlainText(),
+            "items":      self._items.value(),
+            "expression": self._expression.value(),
         }
 
 
