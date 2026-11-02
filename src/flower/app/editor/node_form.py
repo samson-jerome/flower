@@ -1,12 +1,12 @@
 from __future__ import annotations
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QFormLayout,
-    QLineEdit, QCheckBox, QComboBox, QStackedWidget, QSplitter, QScrollArea,
-    QApplication, QMessageBox,
+    QWidget, QVBoxLayout, QStackedWidget, QSplitter, QApplication, QMessageBox,
 )
+from qt_parameters import BoolParameter, ComboParameter, ParameterEditor
 from PySide6.QtCore import Qt, Signal
 from flower.engine.models.node import Node, NodeType, MAX_CHILDREN, EXECUTABLE_TYPES
 from flower.app.editor.type_editors import make_type_editor
+from flower.app.editor.params import LiveStringParameter, setup_form, stretch_last_row
 from flower.app.vars_panel import VarsPanel
 from flower.app.notes_panel import NotesPanel, bind_notes_to_splitter
 from flower.app.prefs.theme import is_dark
@@ -51,16 +51,20 @@ class NodeForm(QWidget):
             app.paletteChanged.connect(self._apply_theme_colors)
 
         # ── Section 3 : corps du nœud ────────────────────────────────────────
-        self._type_combo = QComboBox()
-        for nt in NodeType:
-            self._type_combo.addItem(nt.value, nt)
-        self._type_combo.setCurrentText(node.type.value)
+        self._type_combo = ComboParameter("type")
+        self._type_combo.set_label(t("form.type"))
+        self._type_combo.set_items([(nt.value, nt) for nt in NodeType])
+        self._type_combo.set_value(node.type)
 
-        self._name   = QLineEdit(node.name)
-        self._active = QCheckBox()
-        self._active.setChecked(node.is_active)
-        self._executable = QCheckBox()
-        self._executable.setChecked(node.is_executable)
+        self._name = LiveStringParameter("name")
+        self._name.set_label(t("form.name"))
+        self._name.set_value(node.name)
+        self._active = BoolParameter("active")
+        self._active.set_label(t("form.active"))
+        self._active.set_value(node.is_active)
+        self._executable = BoolParameter("executable")
+        self._executable.set_label(t("form.executable"))
+        self._executable.set_value(node.is_executable)
 
         self._stack: QStackedWidget = QStackedWidget()
         self._type_editors: dict[NodeType, QWidget] = {}
@@ -69,34 +73,25 @@ class NodeForm(QWidget):
             self._type_editors[nt] = editor
             self._stack.addWidget(editor)
 
+        self._body = setup_form(ParameterEditor(), nested=False)
+        for param in (self._type_combo, self._name, self._active, self._executable):
+            self._body.add_parameter(param)
+        self._body.add_widget(self._stack)
+        stretch_last_row(self._body)
+
+        # Connected only once the initial values are in: set_items() and
+        # set_value() emit too.
         self._refresh_type_editor(node.type)
-        self._type_combo.currentIndexChanged.connect(self._on_type_changed)
-
-        self._form_layout = QFormLayout()
-        form = self._form_layout
-        form.addRow(t("form.type"),       self._type_combo)
-        form.addRow(t("form.name"),       self._name)
-        form.addRow(t("form.active"),     self._active)
-        form.addRow(t("form.executable"), self._executable)
         self._refresh_executable_row(node.type)
-        self._executable.toggled.connect(self._emit_exec_state)
-        self._active.toggled.connect(self._emit_exec_state)
-
-        body = QWidget()
-        body_layout = QVBoxLayout(body)
-        body_layout.setContentsMargins(4, 4, 4, 4)
-        body_layout.addLayout(form)
-        body_layout.addWidget(self._stack)
-
-        body_scroll = QScrollArea()
-        body_scroll.setWidget(body)
-        body_scroll.setWidgetResizable(True)
+        self._type_combo.value_changed.connect(self._on_type_changed)
+        self._executable.value_changed.connect(self._emit_exec_state)
+        self._active.value_changed.connect(self._emit_exec_state)
 
         # ── Assemblage ───────────────────────────────────────────────────────
         self._splitter = QSplitter(Qt.Orientation.Vertical)
         self._splitter.addWidget(self._description)
         self._splitter.addWidget(self._vars)
-        self._splitter.addWidget(body_scroll)
+        self._splitter.addWidget(self._body)
         self._splitter.setStretchFactor(0, 0)
         self._splitter.setStretchFactor(1, 0)
         self._splitter.setStretchFactor(2, 1)
@@ -118,16 +113,14 @@ class NodeForm(QWidget):
     def set_name_visible(self, visible: bool) -> None:
         """Hide the name row when the form is docked (the dock header already
         shows an editable name)."""
-        label = self._form_layout.labelForField(self._name)
-        if label:
-            label.setVisible(visible)
+        # qt-parameters mirrors the row's visibility onto its label.
         self._name.setVisible(visible)
 
     def set_name(self, name: str) -> None:
-        self._name.setText(name)
+        self._name.set_value(name)
 
-    def _on_type_changed(self, _index: int) -> None:
-        ntype = NodeType(self._type_combo.currentData())
+    def _on_type_changed(self, _value) -> None:
+        ntype = NodeType(self._type_combo.value())
         max_children = MAX_CHILDREN.get(ntype)
         if max_children is not None and len(self._node.children) > max_children:
             QMessageBox.warning(
@@ -136,8 +129,10 @@ class NodeForm(QWidget):
                   type=ntype.value, max=max_children,
                   count=len(self._node.children)),
             )
+            # Blocked on the parameter, not its inner combo: set_value()
+            # emits value_changed, which would re-enter this handler.
             blocked = self._type_combo.blockSignals(True)
-            self._type_combo.setCurrentText(self._node.type.value)
+            self._type_combo.set_value(self._node.type)
             self._type_combo.blockSignals(blocked)
             # The combo is back on the node's own type, so the executable row
             # has to follow it: otherwise it stays disabled from the type that
@@ -164,9 +159,9 @@ class NodeForm(QWidget):
         in the form -- not for those in the node, which only receives them on
         apply."""
         return (
-            self._executable.isChecked()
-            and NodeType(self._type_combo.currentData()) in EXECUTABLE_TYPES
-            and self._active.isChecked()
+            self._executable.value()
+            and NodeType(self._type_combo.value()) in EXECUTABLE_TYPES
+            and self._active.value()
         )
 
     def _emit_exec_state(self, *_args) -> None:
@@ -179,19 +174,16 @@ class NodeForm(QWidget):
         noop -> script, all before Apply) does not silently drop the
         user's pending choice. get_node_data() and exec_state() already gate
         on the type, so persistence is unaffected."""
-        eligible = ntype in EXECUTABLE_TYPES
-        self._executable.setEnabled(eligible)
-        label = self._form_layout.labelForField(self._executable)
-        if label:
-            label.setEnabled(eligible)
+        # qt-parameters mirrors the enabled state onto the row's label.
+        self._executable.setEnabled(ntype in EXECUTABLE_TYPES)
 
     def get_node_data(self) -> dict:
-        ntype = NodeType(self._type_combo.currentData())
+        ntype = NodeType(self._type_combo.value())
         return {
-            "name":          self._name.text(),
+            "name":          self._name.value(),
             "type":          ntype,
-            "is_active":     self._active.isChecked(),
-            "is_executable": self._executable.isChecked() and ntype in EXECUTABLE_TYPES,
+            "is_active":     self._active.value(),
+            "is_executable": self._executable.value() and ntype in EXECUTABLE_TYPES,
             "description":   self._description.text(),
             "type_data":     self._type_editors[ntype].get_data(),
             "variables":     self._vars.get_variables(),

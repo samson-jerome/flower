@@ -3,6 +3,8 @@ import pytest
 from flower.engine.models.node import Node, NodeType
 from flower.app.editor.node_form import NodeForm
 from flower.app.dock_panel import DockPanel
+from flower.app.editor.editor_window import EditorWindow
+from qt_parameters import ParameterForm
 
 
 def _node(name="alpha"):
@@ -95,9 +97,16 @@ def test_dock_hides_form_name_row_and_undock_restores_it(qapp):
     node = _node()
     form = _form(node)
     panel.dock(node.id, node, form)
+    panel.show()
+    qapp.processEvents()
     assert form._name.isHidden()
+    assert ParameterForm.label(form._name).isVisible() is False
     returned = panel.undock(node.id)
     assert not returned._name.isHidden()
+    win = EditorWindow(node, form=returned)
+    win.show()
+    qapp.processEvents()
+    assert ParameterForm.label(returned._name).isVisible() is True
 
 
 def test_header_name_edit_syncs_form_name(qapp):
@@ -108,7 +117,7 @@ def test_header_name_edit_syncs_form_name(qapp):
     entry = panel._entries[node.id]
     entry._name_edit.setText("beta")
     entry._name_edit.editingFinished.emit()
-    assert form._name.text() == "beta"
+    assert form._name.value() == "beta"
 
 
 def test_collapse_toggle_hides_body(qapp):
