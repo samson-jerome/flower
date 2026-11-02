@@ -1,12 +1,12 @@
 from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget, QStackedWidget, QApplication
-from qt_parameters import ComboParameter, IntParameter, ParameterForm, ParameterWidget
+from qt_parameters import ComboParameter, ParameterForm, ParameterWidget
 from flower.engine.models.node import NodeType
 from flower.app.prefs import highlight_styles
 from flower.app.editor.highlighter import PygmentsHighlighter
 from flower.app.editor.params import (
-    CodeParameter, LiveStringParameter, setup_form, stretch_last_row,
+    BoundedIntParameter, CodeParameter, LiveStringParameter, setup_form, stretch_last_row,
 )
 from flower.i18n import t
 
@@ -125,12 +125,11 @@ _START_END_BOUNDS = (-9999, 9999)
 _STEP_BOUNDS = (1, 9999)
 
 
-def _bounded_int(name: str, low: int, high: int) -> IntParameter:
-    param = IntParameter(name)
+def _bounded_int(name: str, low: int, high: int) -> BoundedIntParameter:
+    param = BoundedIntParameter(name)
     param.set_slider_visible(False)
     param.set_line_min(low)
     param.set_line_max(high)
-    param.set_commit_on_edit(True)
     param.set_value(max(low, 0))
     return param
 

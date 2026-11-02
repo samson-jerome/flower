@@ -284,3 +284,45 @@ def test_loop_items_field_sits_at_the_top_of_its_page(qapp):
     qapp.processEvents()
     page = editor._stack.currentWidget()
     assert editor._items.text.mapTo(page, editor._items.text.rect().topLeft()).y() < 20
+
+
+def _clear_and_type(line, text):
+    line.selectAll()
+    QTest.keyClick(line, Qt.Key.Key_Backspace)
+    if text:
+        QTest.keyClicks(line, text)
+
+
+@pytest.mark.parametrize("typed", ["", "0"])
+def test_loop_step_keeps_its_last_valid_value_on_incomplete_input(qapp, typed):
+    # A step of 0 would generate a bash loop that never ends.
+    editor = LoopEditor()
+    editor.set_data({"index": "i", "mode": "range", "step": 3})
+    _clear_and_type(editor._step.line, typed)
+    assert editor.get_data()["step"] == 3
+
+
+def test_loop_cleared_start_keeps_its_last_valid_value(qapp):
+    editor = LoopEditor()
+    editor.set_data({"index": "i", "mode": "range", "start": 5})
+    _clear_and_type(editor._start.line, "")
+    assert editor.get_data()["start"] == 5
+
+
+def test_loop_incomplete_number_is_restored_on_focus_out(qapp):
+    # What the field shows once left is what get_data() returns.
+    from PySide6.QtCore import QEvent
+    from PySide6.QtGui import QFocusEvent
+    editor = LoopEditor()
+    editor.set_data({"index": "i", "mode": "range", "step": 3})
+    _clear_and_type(editor._step.line, "0")
+    qapp.sendEvent(editor._step.line, QFocusEvent(QEvent.Type.FocusOut))
+    assert editor._step.line.text() == "3"
+
+
+def test_loop_items_field_grows_while_typing(qapp):
+    editor = LoopEditor()
+    editor.set_data({"index": "i", "mode": "list", "items": ""})
+    before = editor._items.text.height()
+    editor._items.text.setPlainText("\n".join("abcdefghijk"))
+    assert editor._items.text.height() > before
