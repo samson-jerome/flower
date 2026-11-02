@@ -272,3 +272,15 @@ def test_loop_typed_number_is_taken_without_focus_out(qapp):
 def test_loop_items_is_not_a_code_edit(qapp):
     editor = LoopEditor()
     assert not isinstance(editor._items.text, CodeEdit)
+
+
+def test_loop_items_field_sits_at_the_top_of_its_page(qapp):
+    # The items area sizes itself to its lines; stretching its row would
+    # centre it in the leftover height instead.
+    editor = LoopEditor()
+    editor.set_data({"index": "i", "mode": "list", "items": "a\nb"})
+    editor.resize(400, 600)
+    editor.show()
+    qapp.processEvents()
+    page = editor._stack.currentWidget()
+    assert editor._items.text.mapTo(page, editor._items.text.rect().topLeft()).y() < 20

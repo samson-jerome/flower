@@ -173,7 +173,10 @@ class LoopEditor(ParameterForm):
             page = setup_form(ParameterForm(name=mode), nested=True)
             for param in params:
                 page.add_parameter(param)
-            stretch_last_row(page)
+            # Only the expression field fills the page: the others keep their
+            # own height (the items area grows with its lines) at the top.
+            if mode == "expression":
+                stretch_last_row(page)
             self._stack.addWidget(page)
 
         self._mode.value_changed.connect(
