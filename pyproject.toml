@@ -6,6 +6,7 @@ dependencies = [
     "pyside6>=6.7",
     "lxml>=5.0",
     "pygments>=2.19",
+    "qt-parameters==1.5.1",
 ]
 
 [project.scripts]
