@@ -7,8 +7,9 @@ from flower.app.prefs import indent as indent_mod
 from flower.engine.models.node import NodeType
 from flower.app.prefs import highlight_styles
 from flower.app.editor import highlighter as highlighter_mod
+from operator import attrgetter
 from flower.app.editor.type_editors import (
-    make_type_editor, DataEditor, ScriptEditor, LoopEditor,
+    make_type_editor, DataEditor, ScriptEditor, LoopEditor, IfEditor,
 )
 
 
@@ -95,7 +96,7 @@ def test_make_type_editor_all_types(qapp):
 
 def test_script_editor_language_combo_is_not_editable(qapp):
     editor = ScriptEditor()
-    assert not editor._language.isEditable()
+    assert not editor._language.combo.isEditable()
 
 
 def test_script_editor_unknown_language_falls_back_to_bash(qapp):
@@ -114,7 +115,7 @@ def test_script_editor_combo_drives_the_highlighter(qapp):
     editor = ScriptEditor()
     editor.set_data({"language": "python", "body": "import os\n"})
     python_spans = len(editor._highlighter._spans())
-    editor._language.setCurrentText("bash")
+    editor._language.combo.setCurrentText("bash")
     assert len(editor._highlighter._spans()) != python_spans
 
 
@@ -154,7 +155,7 @@ def test_data_editor_highlights_the_content_as_python(qapp):
     # closest fit for the structured payloads it usually carries.
     editor = DataEditor()
     editor.set_data({"command": "cat", "content": 'x = {"a": 1}  # note'})
-    assert editor._highlighter.document() is editor._content.document()
+    assert editor._highlighter.document() is editor._content.edit.document()
     assert editor._highlighter._spans()
 
 
@@ -185,8 +186,8 @@ def isolated_indent_settings(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("editor_class, field, data", [
-    (ScriptEditor, "_body",       {"language": "bash", "body": ""}),
-    (DataEditor,   "_content",    {"command": "", "content": ""}),
+    (ScriptEditor, "_body.edit",    {"language": "bash", "body": ""}),
+    (DataEditor,   "_content.edit", {"command": "", "content": ""}),
     (LoopEditor,   "_expression", {"index": "f", "mode": "expression", "start": 0,
                                    "end": 0, "step": 1, "items": "", "expression": ""}),
 ])
@@ -195,7 +196,7 @@ def test_tab_indents_with_spaces_in_every_code_field(
 ):
     editor = editor_class()
     editor.set_data(data)
-    widget = getattr(editor, field)
+    widget = attrgetter(field)(editor)
     QTest.keyClick(widget, Qt.Key.Key_Tab)
     assert widget.toPlainText() == "    "
 
@@ -205,3 +206,31 @@ def test_the_loop_items_field_keeps_the_plain_tab_behaviour(qapp):
     # same reason it carries no highlighter.
     editor = LoopEditor()
     assert type(editor._items) is not type(editor._expression)
+
+
+def test_script_editor_body_fills_the_editor(qapp):
+    editor = ScriptEditor()
+    editor.resize(400, 800)
+    editor.show()
+    qapp.processEvents()
+    assert editor._body.edit.height() > 600
+
+
+def test_if_editor_roundtrip(qapp):
+    editor = IfEditor()
+    editor.set_data({"condition": "[ -n x ]"})
+    assert editor.get_data() == {"condition": "[ -n x ]"}
+
+
+def test_data_editor_takes_typed_values_without_focus_out(qapp):
+    editor = DataEditor()
+    editor.set_data({"command": "", "content": ""})
+    editor._command.text.setText("cat")
+    editor._content.edit.setPlainText("x")
+    assert editor.get_data() == {"command": "cat", "content": "x"}
+
+
+def test_script_editor_unknown_language_shows_bash(qapp):
+    editor = ScriptEditor()
+    editor.set_data({"language": "ruby", "body": ""})
+    assert editor._language.combo.currentText() == "bash"

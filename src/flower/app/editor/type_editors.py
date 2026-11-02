@@ -1,14 +1,21 @@
 from __future__ import annotations
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QFormLayout, QLabel,
-    QLineEdit, QTextEdit, QComboBox, QSpinBox,
+    QWidget, QVBoxLayout, QFormLayout,
+    QLineEdit, QTextEdit, QSpinBox,
     QRadioButton, QButtonGroup, QStackedWidget, QApplication,
 )
+from qt_parameters import ComboParameter, ParameterForm, ParameterWidget
 from flower.engine.models.node import NodeType
 from flower.app.prefs import highlight_styles
 from flower.app.editor.code_edit import CodeEdit
 from flower.app.editor.highlighter import PygmentsHighlighter
+from flower.app.editor.params import (
+    CodeParameter, LiveStringParameter, setup_form, stretch_last_row,
+)
 from flower.i18n import t
+
+SCRIPT_LANGUAGES: tuple[str, ...] = ("bash", "python", "sh", "powershell", "javascript")
 
 
 def _follow_theme(highlighter: PygmentsHighlighter) -> None:
@@ -27,10 +34,10 @@ def _follow_theme(highlighter: PygmentsHighlighter) -> None:
     highlight_styles.notifier.changed.connect(highlighter.refresh_theme)
 
 
-class NoopEditor(QWidget):
+class NoopEditor(ParameterForm):
     def __init__(self, parent=None):
-        super().__init__(parent)
-        QVBoxLayout(self)
+        super().__init__(name=NodeType.NOOP.value, parent=parent)
+        setup_form(self, nested=True)
 
     def set_data(self, data: dict) -> None:
         pass
@@ -39,77 +46,83 @@ class NoopEditor(QWidget):
         return {}
 
 
-class ScriptEditor(QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._language = QComboBox()
-        self._language.addItems(["bash", "python", "sh", "powershell", "javascript"])
+def _labelled(param: ParameterWidget, label: str) -> ParameterWidget:
+    """Every label is set explicitly: qt-parameters would otherwise show the
+    parameter's technical name, untranslated."""
+    param.set_label(label)
+    return param
 
-        self._body = CodeEdit()
+
+class ScriptEditor(ParameterForm):
+    def __init__(self, parent=None):
+        super().__init__(name=NodeType.SCRIPT.value, parent=parent)
+        setup_form(self, nested=True)
+        self._language = _labelled(ComboParameter("language"), t("form.script.language"))
+        self._language.set_items(SCRIPT_LANGUAGES)
+        self._body = _labelled(CodeParameter("body"), t("form.script.body"))
 
         self._highlighter = PygmentsHighlighter(
-            self._body.document(), self._language.currentText()
+            self._body.edit.document(), self._language.value()
         )
-        self._language.currentTextChanged.connect(self._highlighter.set_language)
+        self._language.value_changed.connect(self._highlighter.set_language)
         _follow_theme(self._highlighter)
 
-        layout = QVBoxLayout(self)
-        form = QFormLayout()
-        form.addRow(t("form.script.language"), self._language)
-        layout.addLayout(form)
-        layout.addWidget(QLabel(t("form.script.body")))
-        layout.addWidget(self._body)
+        self.add_parameter(self._language)
+        self.add_parameter(self._body, alignment=Qt.AlignmentFlag.AlignTop)
+        stretch_last_row(self)
 
     def set_data(self, data: dict) -> None:
         lang = data.get("language", "bash")
-        idx = self._language.findText(lang)
-        self._language.setCurrentIndex(idx if idx >= 0 else 0)
-        # Set it explicitly: assigning an index that is already current emits
+        # Mapped before set_value(): an unknown value would leave the combo
+        # on no item at all and the parameter on None.
+        if lang not in SCRIPT_LANGUAGES:
+            lang = "bash"
+        self._language.set_value(lang)
+        # Set it explicitly: assigning the value that is already current emits
         # no signal, so the highlighter would keep the previous lexer.
-        self._highlighter.set_language(self._language.currentText())
-        self._body.setPlainText(data.get("body", ""))
+        self._highlighter.set_language(lang)
+        self._body.set_value(data.get("body", ""))
 
     def get_data(self) -> dict:
-        return {"language": self._language.currentText(), "body": self._body.toPlainText()}
+        return {"language": self._language.value(), "body": self._body.value()}
 
 
-class DataEditor(QWidget):
+class DataEditor(ParameterForm):
     def __init__(self, parent=None):
-        super().__init__(parent)
-        self._command = QLineEdit()
-        self._content = CodeEdit()
+        super().__init__(name=NodeType.DATA.value, parent=parent)
+        setup_form(self, nested=True)
+        self._command = _labelled(LiveStringParameter("command"), t("form.data.command"))
+        self._content = _labelled(CodeParameter("content"), t("form.data.content"))
 
         # A DATA node declares no language, so the lexer is fixed -- python,
         # which reads well on the structured payloads these nodes carry.
-        self._highlighter = PygmentsHighlighter(self._content.document(), "python")
+        self._highlighter = PygmentsHighlighter(self._content.edit.document(), "python")
         _follow_theme(self._highlighter)
 
-        layout = QVBoxLayout(self)
-        form = QFormLayout()
-        form.addRow(t("form.data.command"), self._command)
-        layout.addLayout(form)
-        layout.addWidget(QLabel(t("form.data.content")))
-        layout.addWidget(self._content)
+        self.add_parameter(self._command)
+        self.add_parameter(self._content, alignment=Qt.AlignmentFlag.AlignTop)
+        stretch_last_row(self)
 
     def set_data(self, data: dict) -> None:
-        self._command.setText(data.get("command", ""))
-        self._content.setPlainText(data.get("content", ""))
+        self._command.set_value(data.get("command", ""))
+        self._content.set_value(data.get("content", ""))
 
     def get_data(self) -> dict:
-        return {"command": self._command.text(), "content": self._content.toPlainText()}
+        return {"command": self._command.value(), "content": self._content.value()}
 
 
-class IfEditor(QWidget):
+class IfEditor(ParameterForm):
     def __init__(self, parent=None):
-        super().__init__(parent)
-        self._condition = QLineEdit()
-        QFormLayout(self).addRow(t("form.if.condition"), self._condition)
+        super().__init__(name=NodeType.IF.value, parent=parent)
+        setup_form(self, nested=True)
+        self._condition = _labelled(LiveStringParameter("condition"), t("form.if.condition"))
+        self.add_parameter(self._condition)
 
     def set_data(self, data: dict) -> None:
-        self._condition.setText(data.get("condition", ""))
+        self._condition.set_value(data.get("condition", ""))
 
     def get_data(self) -> dict:
-        return {"condition": self._condition.text()}
+        return {"condition": self._condition.value()}
 
 
 class LoopEditor(QWidget):
