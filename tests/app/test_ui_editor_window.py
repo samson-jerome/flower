@@ -83,9 +83,9 @@ def test_exec_button_disabled_on_an_inactive_executable_node(qapp):
 
 def test_exec_button_follows_the_form_checkbox(qapp):
     win = EditorWindow(_script_node())
-    win._form._executable.setChecked(True)
+    win._form._executable.set_value(True)
     assert win._exec_btn.isEnabled() is True
-    win._form._active.setChecked(False)
+    win._form._active.set_value(False)
     assert win._exec_btn.isEnabled() is False
 
 
@@ -94,7 +94,7 @@ def test_exec_button_seeded_from_a_form_with_unapplied_uncheck(qapp):
     # itself is still executable: the button must follow the form, not it.
     node = _script_node(executable=True)
     form = NodeForm(node)
-    form._executable.setChecked(False)
+    form._executable.set_value(False)
     win = EditorWindow(node, form=form)
     assert win._exec_btn.isEnabled() is False
 
@@ -104,7 +104,7 @@ def test_exec_button_seeded_from_a_form_with_unapplied_check(qapp):
     # itself is not executable, yet the button must be enabled.
     node = _script_node(executable=False)
     form = NodeForm(node)
-    form._executable.setChecked(True)
+    form._executable.set_value(True)
     win = EditorWindow(node, form=form)
     assert win._exec_btn.isEnabled() is True
 
@@ -112,8 +112,8 @@ def test_exec_button_seeded_from_a_form_with_unapplied_check(qapp):
 def test_exec_button_applies_the_form_before_emitting(qapp):
     node = _script_node()
     win  = EditorWindow(node)
-    win._form._executable.setChecked(True)
-    win._form._name.setText("renamed")
+    win._form._executable.set_value(True)
+    win._form._name.text.setText("renamed")
     seen = []
     # Capture the node as the receiver will see it: a receiver that read a
     # stale node would run a script built from values the user never applied.
